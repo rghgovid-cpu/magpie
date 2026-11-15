@@ -4,6 +4,7 @@ use crate::llm::LLMClient;
 use crate::registry::SkillRegistry;
 use axum::{
     extract::State,
+    response::{Html, IntoResponse},
     http::StatusCode,
     routing::{get, post},
     Json, Router,
@@ -52,9 +53,9 @@ pub fn router(llm: LLMClient) -> Router {
 }
 
 /// Serve the main HTML page.
-async fn serve_index() -> StdResult<(StatusCode, String), StatusCode> {
+async fn serve_index() -> StdResult<Html<String>, StatusCode> {
     let html = include_str!("../web_ui.html");
-    Ok((StatusCode::OK, html.to_string()))
+    Ok(Html(html.to_string()))
 }
 
 /// Handle chat requests — calls the LLM and returns the response.
