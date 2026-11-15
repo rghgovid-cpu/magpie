@@ -10,6 +10,7 @@ pub mod agent;
 pub mod commands;
 pub mod config;
 pub mod error;
+pub mod llm;
 pub mod model;
 pub mod print;
 pub mod registry;

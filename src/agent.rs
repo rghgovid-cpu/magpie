@@ -1,4 +1,6 @@
+use crate::config::load_magpie_config;
 use crate::error::Result;
+use crate::llm::LLMClient;
 use std::io::{self, Write};
 
 /// Marketing system prompt that frames Magpie as a marketing assistant.
@@ -6,9 +8,12 @@ const MARKETING_CONTEXT: &str = "You are Magpie, a marketing-focused AI assistan
 Help the user with marketing tasks: copywriting, campaign planning, SEO, ads, email,\nsocial media, landing pages, brand voice, and go-to-market messaging.\n\
 Prefer clear, persuasive, conversion-oriented output. When relevant, use installed\nmarketing skills to ground your work.";
 
-/// Run Magpie in interactive agentic mode.
-pub async fn run_interactive() -> Result<()> {
+/// Run Magpie in interactive agentic mode with real LLM responses.
+pub async fn run_interactive(stream: bool) -> Result<()> {
+    let llm = LLMClient::from_config()?;
+
     println!("🪶 Magpie — marketing assistant (agentic mode)");
+    println!("Model: {} | Base URL: {}", llm.model, llm.base_url);
     println!("Type your request. Press Ctrl+C or type /exit to quit.\n");
 
     loop {
@@ -31,19 +36,15 @@ pub async fn run_interactive() -> Result<()> {
                     continue;
                 }
 
-                // Build the full prompt with marketing context.
-                let full_prompt = format!("{}\n\nUser request: {}", MARKETING_CONTEXT, input);
+                println!("\n[Magpie agent] Thinking...\n");
 
-                // In a full build, this would call an LLM provider via the model API.
-                // Here we provide a helpful scaffolding response.
-                println!("\n[Magpie agent] Received: \"{}\"\n", input);
-                println!("Full prompt sent to model:");
-                println!("{}\n", full_prompt);
-                println!("Suggested next steps for this marketing task:");
-                println!("  1. Define the target audience and goal.");
-                println!("  2. Choose a skill: magpie skills install <skill>");
-                println!("  3. Draft copy using the selected skill.");
-                println!("  4. Print to PDF/Word: magpie print draft.md --format pdf --size a4\n");
+                if stream {
+                    llm.chat_stream(MARKETING_CONTEXT, input).await?;
+                } else {
+                    let response = llm.chat(MARKETING_CONTEXT, input).await?;
+                    println!("{}", response);
+                }
+                println!();
             }
             Err(e) => return Err(crate::error::MagpieError::Io(e)),
         }
@@ -51,11 +52,16 @@ pub async fn run_interactive() -> Result<()> {
     Ok(())
 }
 
-/// One-shot run: send a message and get a response.
-pub async fn run_one_shot(message: &str) -> Result<()> {
-    let full_prompt = format!("{}\n\nUser request: {}", MARKETING_CONTEXT, message);
-    println!("{}", full_prompt);
-    println!("\n[Magpie agent] (LLM provider integration pending — wire in your preferred model here.)");
+/// One-shot run: send a message and get a response from the LLM.
+pub async fn run_one_shot(message: &str, stream: bool) -> Result<()> {
+    let llm = LLMClient::from_config()?;
+
+    if stream {
+        llm.chat_stream(MARKETING_CONTEXT, message).await?;
+    } else {
+        let response = llm.chat(MARKETING_CONTEXT, message).await?;
+        println!("{}", response);
+    }
     Ok(())
 }
 

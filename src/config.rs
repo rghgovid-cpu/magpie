@@ -16,6 +16,15 @@ pub struct MagpieConfig {
     pub default_paper_size: PaperSize,
     pub default_format: PrintFormat,
     pub auto_install: bool,
+    pub llm_provider: LLMProviderConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LLMProviderConfig {
+    pub base_url: Option<String>,
+    pub api_key: Option<String>,
+    pub model: Option<String>,
+    pub temperature: Option<f32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]

@@ -60,6 +60,9 @@ enum Commands {
     Run {
         /// Message to send (one-shot mode). Omit for interactive TUI.
         message: Option<String>,
+        /// Stream the LLM response token by token
+        #[arg(short = 's', long = "stream")]
+        stream: bool,
     },
     /// Manage Magpie / OpenCode skill sources.
     Config {
@@ -193,10 +196,10 @@ async fn run(cli: Cli) -> Result<()> {
                 );
             }
         }
-        Commands::Run { message } => {
+        Commands::Run { message, stream } => {
             match message {
-                Some(msg) => agent::run_one_shot(&msg).await?,
-                None => agent::run_interactive().await?,
+                Some(msg) => agent::run_one_shot(&msg, stream).await?,
+                None => agent::run_interactive(stream).await?,
             }
         }
         Commands::Config { command } => commands::config::handle(command)?,
