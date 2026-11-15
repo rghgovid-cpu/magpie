@@ -15,5 +15,6 @@ pub mod model;
 pub mod print;
 pub mod registry;
 pub mod skill;
+pub mod web;
 
 pub use error::{MagpieError, Result};

@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use magpie::{
-    agent, commands, error::Result, model, print, registry, skill,
+    agent, commands, error::Result, model, print, registry, skill, web,
 };
 use std::path::PathBuf;
 
@@ -69,6 +69,8 @@ enum Commands {
         #[command(subcommand)]
         command: commands::config::ConfigCommand,
     },
+    /// Start the Magpie web interface on port 7070.
+    Web,
 }
 
 #[tokio::main]
@@ -203,6 +205,9 @@ async fn run(cli: Cli) -> Result<()> {
             }
         }
         Commands::Config { command } => commands::config::handle(command)?,
+        Commands::Web => {
+            web::start_web_server().await?;
+        }
     }
     Ok(())
 }

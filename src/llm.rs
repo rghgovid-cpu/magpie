@@ -65,6 +65,18 @@ pub struct LLMClient {
     pub temperature: f32,
 }
 
+impl Clone for LLMClient {
+    fn clone(&self) -> Self {
+        Self {
+            client: self.client.clone(),
+            base_url: self.base_url.clone(),
+            api_key: self.api_key.clone(),
+            model: self.model.clone(),
+            temperature: self.temperature,
+        }
+    }
+}
+
 impl LLMClient {
     /// Create a client from Magpie config, falling back to environment variables.
     pub fn from_config() -> Result<Self> {

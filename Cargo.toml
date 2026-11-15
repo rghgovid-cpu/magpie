@@ -33,6 +33,9 @@ anyhow = "1"
 thiserror = "1"
 # Spinners / progress
 indicatif = "0.7"
+# Web server for Magpie web interface (port 7070)
+axum = "0.7"
+tower-http = { version = "0.5", features = ["fs"] }
 
 [workspace]
 

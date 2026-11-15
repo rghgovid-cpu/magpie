@@ -1,10 +1,9 @@
-use crate::config::load_magpie_config;
 use crate::error::Result;
 use crate::llm::LLMClient;
 use std::io::{self, Write};
 
 /// Marketing system prompt that frames Magpie as a marketing assistant.
-const MARKETING_CONTEXT: &str = "You are Magpie, a marketing-focused AI assistant.\n\
+pub const MARKETING_CONTEXT: &str = "You are Magpie, a marketing-focused AI assistant.\n\
 Help the user with marketing tasks: copywriting, campaign planning, SEO, ads, email,\nsocial media, landing pages, brand voice, and go-to-market messaging.\n\
 Prefer clear, persuasive, conversion-oriented output. When relevant, use installed\nmarketing skills to ground your work.";
 
