@@ -263,13 +263,13 @@
             border-radius: 16px;
             line-height: 1.6;
             font-size: 15px;
-            white-space: pre-wrap;
         }
 
         .message.user .message-content {
             background: var(--accent);
             color: white;
             border-bottom-right-radius: 4px;
+            white-space: pre-wrap;
         }
 
         .message.assistant .message-content {
@@ -613,7 +613,7 @@
             html = html.replace(/^[-•] (.*$)/gm, '<li style="margin: 4px 0; margin-left: 20px;">$1</li>');
 
             // Wrap consecutive <li> in <ul>
-            html = html.replace(/(<li.*<\/li>(\s*)(?=<li))+/gs, (match) => '<ul style="margin: 8px 0;">' + match + '</ul>');
+            html = html.replace(/(?:<li[^>]*>.*?<\/li>\s*)+/g, (match) => '<ul style="margin: 8px 0;">' + match + '</ul>');
 
             // Line breaks
             html = html.replace(/\n/g, '<br>');
