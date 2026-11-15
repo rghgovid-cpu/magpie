@@ -163,6 +163,9 @@
             cursor: pointer;
             transition: all 0.2s;
             font-size: 13px;
+            display: block;
+            text-decoration: none;
+            color: inherit;
         }
 
         .skill-item:hover {
@@ -260,6 +263,7 @@
             border-radius: 16px;
             line-height: 1.6;
             font-size: 15px;
+            white-space: pre-wrap;
         }
 
         .message.user .message-content {
@@ -569,7 +573,7 @@
             }
 
             skillsListEl.innerHTML = skills.map(s => `
-                <div class="skill-item" onclick="insertSkill('${s.name}')">
+                <div class="skill-item" data-skill="${escapeHtml(s.name)}">
                     <h4>${escapeHtml(s.name)}</h4>
                     <p>${escapeHtml(s.description || '')}</p>
                     <div class="skill-tags">
@@ -577,6 +581,50 @@
                     </div>
                 </div>
             `).join('');
+
+            // Add click listeners with data-skill attribute (safe for apostrophes)
+            skillsListEl.querySelectorAll('.skill-item').forEach(el => {
+                el.addEventListener('click', () => {
+                    const skillName = el.getAttribute('data-skill');
+                    insertSkill(skillName);
+                });
+            });
+        }
+
+        // Simple markdown renderer for chat messages
+        function renderMarkdown(text) {
+            let html = text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+
+            // Headings ###, ##, #
+            html = html.replace(/^### (.*$)/gm, '<h4 style="margin: 12px 0 6px 0; font-size: 16px; color: var(--text);">$1</h4>');
+            html = html.replace(/^## (.*$)/gm, '<h3 style="margin: 14px 0 7px 0; font-size: 18px; color: var(--text);">$1</h3>');
+            html = html.replace(/^# (.*$)/gm, '<h2 style="margin: 16px 0 8px 0; font-size: 22px; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 4px;">$1</h2>');
+
+            // Bold **text**
+            html = html.replace(/\*\*(.*?)\*\*/g, '<strong style="color: var(--accent);">$1</strong>');
+
+            // Italic *text*
+            html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+            // Bullet lists - lines starting with - or •
+            html = html.replace(/^[-•] (.*$)/gm, '<li style="margin: 4px 0; margin-left: 20px;">$1</li>');
+
+            // Wrap consecutive <li> in <ul>
+            html = html.replace(/(<li.*<\/li>(\s*)(?=<li))+/gs, (match) => '<ul style="margin: 8px 0;">' + match + '</ul>');
+
+            // Line breaks
+            html = html.replace(/\n/g, '<br>');
+
+            return html;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
 
         function insertSkill(name) {
@@ -618,11 +666,10 @@
 
                 const data = await res.json();
                 typingEl.remove();
-                contentEl.textContent = data.response || 'No response received.';
+                contentEl.innerHTML = renderMarkdown(data.response || 'No response received.');
             } catch (err) {
                 typingEl.remove();
-                contentEl.textContent = `Error: ${err.message}`;
-                contentEl.style.color = 'var(--error)';
+                contentEl.innerHTML = `<span style="color: var(--error);">Error: ${escapeHtml(err.message)}</span>`;
             } finally {
                 sendBtn.disabled = false;
                 isAssistantThinking = false;
@@ -661,12 +708,6 @@
         function sendQuick(text) {
             inputEl.value = text;
             sendMessage();
-        }
-
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
         }
 
         // Start
