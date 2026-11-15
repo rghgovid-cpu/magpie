@@ -156,100 +156,216 @@ pub fn print_file(input: &Path, format: PrintFormat, size: PageSize, out: Option
     Ok(())
 }
 
+/// Estimated width of a string in points for Helvetica at a given font size.
+/// Uses average character width ~0.5 em for mixed case text.
+fn text_width(text: &str, font_size: f64) -> f64 {
+    // Helvetica average char width is roughly 0.5 * font_size for mixed case.
+    // Uppercase and wide characters (W, M) are wider, narrow (i, l, space) narrower.
+    // This approximation is good enough for wrapping decisions.
+    let mut width = 0.0;
+    for ch in text.chars() {
+        let char_width = match ch {
+            ' ' => 0.278,
+            'i' | 'l' | '!' | '\'' | '[' | ']' | '(' | ')' | '|' => 0.333,
+            'I' => 0.333,
+            'f' => 0.333,
+            'r' | 't' | 'z' | 'c' | 'e' | 'o' | 'a' | 's' | 'n' | 'u' | 'v' | 'w' | 'x' | 'y' | 'k' | 'h' | 'b' | 'd' | 'p' | 'q' | 'j' | 'm' | 'g' | 'w' => 0.5,
+            'M' | 'W' => 0.722,
+            'D' | 'N' | 'O' | 'Q' | 'U' | 'V' | 'X' | 'Y' | 'Z' | 'A' | 'B' | 'C' | 'E' | 'F' | 'G' | 'H' | 'J' | 'K' | 'L' | 'P' | 'R' | 'S' | 'T' => 0.667,
+            '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' => 0.556,
+            '.' | ',' | ':' | ';' => 0.278,
+            '-' | '_' => 0.333,
+            '/' | '\\' | '@' | '#' | '$' | '%' | '&' | '*' | '=' | '?' | '<' | '>' | '"' | '{' | '}' | '~' | '^' | '`' => 0.5,
+            _ => 0.5,
+        };
+        width += char_width * font_size;
+    }
+    width
+}
+
+/// Wrap text to fit within max_width points at given font size.
+fn wrap_text(text: &str, font_size: f64, max_width: f64) -> Vec<String> {
+    if text_width(text, font_size) <= max_width {
+        return vec![text.to_string()];
+    }
+
+    let mut lines = Vec::new();
+    let words: Vec<&str> = text.split_whitespace().collect();
+    let mut current_line = String::new();
+
+    for word in words {
+        let trial = if current_line.is_empty() {
+            word.to_string()
+        } else {
+            format!("{} {}", current_line, word)
+        };
+
+        if text_width(&trial, font_size) <= max_width {
+            current_line = trial;
+        } else {
+            if !current_line.is_empty() {
+                lines.push(current_line.clone());
+            }
+            current_line = word.to_string();
+
+            // If a single word is too long, force-break it
+            if text_width(&current_line, font_size) > max_width {
+                lines.push(current_line.clone());
+                current_line = String::new();
+            }
+        }
+    }
+
+    if !current_line.is_empty() {
+        lines.push(current_line);
+    }
+
+    lines
+}
+
+/// Render blocks to a multi-page PDF.
 fn render_pdf(blocks: &[Block], size: PageSize, out: &Path) -> Result<()> {
     let (page_w, page_h) = size.pdf_dimensions();
+    let margin: f64 = 54.0; // 0.75 inch margins
+    let content_width = page_w - 2.0 * margin;
 
-    // Build the content stream with text operations.
-    let mut content = String::new();
-    let mut y = page_h - 54.0; // top margin
-    let x = 54.0;
-    let line_height = 14.0;
+    // Style settings
+    let body_size: f64 = 11.0;
+    let body_leading: f64 = 15.0;
+    let h1_size: f64 = 20.0;
+    let h1_leading: f64 = 26.0;
+    let h2_size: f64 = 16.0;
+    let h2_leading: f64 = 20.0;
+    let h3_size: f64 = 13.0;
+    let h3_leading: f64 = 17.0;
+
+    // Process blocks into wrapped lines with styles
+    let mut pages: Vec<Vec<(f64, f64, String, f64, bool)>> = Vec::new();
+    pages.push(Vec::new());
+
+    let mut y = page_h - margin;
+    let mut page_idx = 0;
 
     for block in blocks {
         match block.kind {
             BlockKind::Heading(level) => {
-                let size_pt = (22.0 - (level as f64 * 2.0)).max(14.0);
-                content.push_str(&format!(
-                    "BT /F1 {:.1} Tf {:.2} {:.2} Td ({}) Tj ET\n",
-                    size_pt, x, y, escape_pdf_string(&block.text)
-                ));
-                y -= line_height + 4.0;
+                let (font_size, leading) = match level {
+                    1 => (h1_size, h1_leading),
+                    2 => (h2_size, h2_leading),
+                    _ => (h3_size, h3_leading),
+                };
+                let wrapped = wrap_text(&block.text, font_size, content_width);
+                for line in wrapped {
+                    if y < margin + leading {
+                        pages.push(Vec::new());
+                        page_idx += 1;
+                        y = page_h - margin;
+                    }
+                    pages[page_idx].push((y, margin, line, font_size, true));
+                    y -= leading;
+                }
+                y -= leading * 0.3;
             }
             BlockKind::Blank => {
-                y -= line_height * 0.6;
+                y -= body_leading * 0.5;
             }
             BlockKind::Paragraph => {
-                content.push_str(&format!(
-                    "BT /F2 11 Tf {:.2} {:.2} Td ({}) Tj ET\n",
-                    x, y, escape_pdf_string(&block.text)
-                ));
-                y -= line_height;
+                let wrapped = wrap_text(&block.text, body_size, content_width);
+                for line in wrapped {
+                    if y < margin + body_leading {
+                        pages.push(Vec::new());
+                        page_idx += 1;
+                        y = page_h - margin;
+                    }
+                    pages[page_idx].push((y, margin, line, body_size, false));
+                    y -= body_leading;
+                }
+                y -= body_leading * 0.2;
             }
         }
-
-        if y < 54.0 {
-            // Page break
-            content.push_str("showpage\n");
-            y = page_h - 54.0;
+        if y < margin {
+            y = margin;
         }
     }
 
-    let content_len = content.len() as u32;
-    let _page_count = content.split("showpage").count().max(1);
-
-    // Build PDF objects.
-    // Object 1: Catalog
-    // Object 2: Pages
-    // Object 3: Page(s) - we use one page for simplicity (content already has showpage handling,
-    // but for a valid multi-page we'd need multiple pages; here we put everything on one page)
-    // Object 4: Font F1 (Helvetica-Bold)
-    // Object 5: Font F2 (Helvetica)
-    // Object 6: Content stream
-
-    let mut objects = Vec::new();
-
-    // Obj 1: Catalog
-    objects.push(format!("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"));
-
-    // Obj 2: Pages
-    objects.push(format!(
-        "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n"
-    ));
-
-    // Obj 3: Page
-    let mediabox = format!("[0 0 {:.2} {:.2}]", page_w, page_h);
-    objects.push(format!(
-        "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox {mediabox} /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>\nendobj\n"
-    ));
-
-    // Obj 4: Helvetica-Bold
-    objects.push(
-        "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>\nendobj\n"
-            .to_string(),
-    );
-    // Obj 5: Helvetica
-    objects.push(
-        "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n"
-            .to_string(),
-    );
-    // Obj 6: Content stream
-    objects.push(format!(
-        "6 0 obj\n<< /Length {content_len} >>\nstream\n{content}endstream\nendobj\n"
-    ));
-
-    // Build xref.
+    // Build PDF objects
+    let mut objects: Vec<String> = Vec::new();
     let mut xref_offsets: Vec<u64> = Vec::new();
     let mut pdf_body = String::from("%PDF-1.4\n");
-    // % comment line to ensure offset accuracy
     pdf_body.push_str("%\x00\x01\x02\x03\n");
+
+    // Object numbering:
+    // 1 = Catalog
+    // 2 = Pages tree
+    // 3 = Helvetica-Bold font
+    // 4 = Helvetica font
+    // 5.. = Page objects and content streams interleaved
+
+    // Object 1: Catalog
+    objects.push("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n".to_string());
+
+    // Object 2: Pages tree
+    let page_count = pages.len() as u32;
+    let mut kids = String::new();
+    let mut next_obj = 5; // first page object
+    for _ in 0..page_count {
+        kids.push_str(&format!("{} 0 R ", next_obj));
+        next_obj += 2; // page + content stream
+    }
+    objects.push(format!(
+        "2 0 obj\n<< /Type /Pages /Kids [{kids}] /Count {page_count} >>\nendobj\n"
+    ));
+
+    // Object 3: Helvetica-Bold
+    objects.push(
+        "3 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>\nendobj\n"
+            .to_string(),
+    );
+    // Object 4: Helvetica
+    objects.push(
+        "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n"
+            .to_string(),
+    );
+
+    // Page objects (odd numbers starting at 5) and content streams (even numbers starting at 6)
+    let mut obj_num = 5;
+    for page_lines in &pages {
+        // Content stream (even number)
+        let content_obj = obj_num + 1;
+        let mut content = String::new();
+        let mut y_text = page_h - margin;
+
+        for (_y_pos, x, text, font_size, is_bold) in page_lines {
+            let font_ref = if *is_bold { 3 } else { 4 };
+            content.push_str(&format!(
+                "BT /F{} {:.1} Tf {:.2} {:.2} Td ({}) Tj ET\n",
+                font_ref, font_size, x, y_text, escape_pdf_string(text)
+            ));
+            y_text -= if *is_bold { 22.0 } else { 15.0 };
+        }
+
+        let content_len = content.len() as u32;
+        objects.push(format!(
+            "{content_obj} 0 obj\n<< /Length {content_len} >>\nstream\n{content}endstream\nendobj\n"
+        ));
+
+        // Page object (odd number)
+        let mediabox = format!("[0 0 {:.2} {:.2}]", page_w, page_h);
+        objects.push(format!(
+            "{obj_num} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox {mediabox} /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents {content_obj} 0 R >>\nendobj\n"
+        ));
+
+        obj_num += 2;
+    }
+
+    // Build xref
+    let xref_start = pdf_body.len() as u64;
+    let num_objects = objects.len() + 1;
 
     for obj in &objects {
         xref_offsets.push(pdf_body.len() as u64);
         pdf_body.push_str(obj);
     }
-
-    let xref_start = pdf_body.len() as u64;
-    let num_objects = xref_offsets.len() as u32 + 1; // +1 for object 0
 
     pdf_body.push_str("xref\n");
     pdf_body.push_str(&format!("0 {num_objects}\n"));
@@ -423,5 +539,21 @@ mod tests {
     #[test]
     fn test_escape_pdf_string() {
         assert_eq!(escape_pdf_string("Hello (World)"), "Hello \\(World\\)");
+    }
+
+    #[test]
+    fn test_wrap_text() {
+        let wrapped = wrap_text("This is a short sentence that should wrap", 11.0, 100.0);
+        assert!(wrapped.len() > 1);
+        // Each line should fit within max_width
+        for line in &wrapped {
+            assert!(text_width(line, 11.0) <= 100.0 + 1.0); // small tolerance
+        }
+    }
+
+    #[test]
+    fn test_text_width() {
+        assert!(text_width("Hello", 12.0) > 0.0);
+        assert!(text_width("Hello World", 12.0) > text_width("Hello", 12.0));
     }
 }
