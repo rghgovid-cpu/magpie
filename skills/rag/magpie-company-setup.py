@@ -49,7 +49,7 @@ def crawl_website(url):
     """Crawl a website using the crawl skill and save to knowledge/."""
     import subprocess
     result = subprocess.run(
-        ["python3", str(Path(__file__).resolve().parent / "magpie-crawl.py"),
+        ["python3", str(Path(__file__).resolve().parent.parent / "crawl/magpie-crawl.py"),
          url, "--format", "json", "--out", str(KNOWLEDGE_DIR / "crawled-pages.json")],
         capture_output=True, text=True, timeout=120
     )
@@ -69,7 +69,7 @@ def analyze_brand(url, model, api_key, base_url):
     env["MAGPIE_MODEL"] = model
 
     result = subprocess.run(
-        ["python3", str(Path(__file__).resolve().parent / "magpie-brand-analysis.py"),
+        ["python3", str(Path(__file__).resolve().parent.parent / "brand-analysis/magpie-brand-analysis.py"),
          url, "--format", "md", "--out", str(KNOWLEDGE_DIR / "brand-analysis.md")],
         env=env, capture_output=True, text=True, timeout=120
     )
