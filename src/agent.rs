@@ -72,6 +72,49 @@ fn get_rag_context(query: &str) -> String {
     }
 }
 
+/// Load static company context files (company-summary.md, brand-analysis.md)
+/// that are always included in every marketing request.
+fn get_static_company_context() -> String {
+    let knowledge_dir = Path::new(DEFAULT_KNOWLEDGE_DIR);
+    if !knowledge_dir.is_dir() {
+        return String::new();
+    }
+
+    let mut context = String::new();
+
+    // Company summary
+    let summary_file = knowledge_dir.join("company-summary.md");
+    if summary_file.exists() {
+        if let Ok(content) = std::fs::read_to_string(&summary_file) {
+            if !content.trim().is_empty() {
+                context.push_str(&format!(
+                    "\n\n## Company Summary\n{}\n",
+                    content.trim()
+                ));
+            }
+        }
+    }
+
+    // Brand analysis
+    let brand_file = knowledge_dir.join("brand-analysis.md");
+    if brand_file.exists() {
+        if let Ok(content) = std::fs::read_to_string(&brand_file) {
+            if !content.trim().is_empty() {
+                context.push_str(&format!(
+                    "\n\n## Brand Identity (from website analysis)\n{}\n",
+                    content.trim()
+                ));
+            }
+        }
+    }
+
+    if context.is_empty() {
+        String::new()
+    } else {
+        format!("\n\n## Company Context (always applied){}", context)
+    }
+}
+
 /// Automatically analyze websites mentioned in user input and return brand context.
 /// This runs brand analysis on any URLs found in the input, then injects the
 /// brand identity (colors, fonts, logo) into the system prompt.
@@ -132,12 +175,14 @@ fn get_brand_context(query: &str) -> String {
     )
 }
 
-/// Build the full system prompt with optional RAG and brand context.
+/// Build the full system prompt with RAG context, static company context, and brand context.
 fn build_system_prompt(query: &str) -> String {
     let rag_context = get_rag_context(query);
+    let static_context = get_static_company_context();
     let brand_context = get_brand_context(query);
 
     let mut prompt = MARKETING_CONTEXT.to_string();
+    prompt.push_str(&static_context);
     prompt.push_str(&rag_context);
     prompt.push_str(&brand_context);
     prompt
@@ -220,6 +265,11 @@ fn print_help() {
     println!("  \"write a landing page for https://example.com\"");
     println!("  \"write ad copy like https://competitor.com\"");
     println!("  Magpie will automatically extract brand colors, fonts, and logo");
+    println!("");
+    println!("Company setup:");
+    println!("  magpie company-setup --website https://yourcompany.com");
+    println!("  magpie company-setup --pdf brochure.pdf");
+    println!("  magpie company-setup --website https://yourcompany.com --pdf brochure.pdf");
     println!("");
     println!("RAG (company knowledge):");
     println!("  Drop documents into knowledge/ and Magpie will use them automatically.");

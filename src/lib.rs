@@ -7,6 +7,7 @@
 //! - PDF / Word printing (A4 & US Letter)
 
 pub mod agent;
+pub mod company;
 pub mod commands;
 pub mod config;
 pub mod error;

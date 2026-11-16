@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use magpie::{
-    agent, commands, error::Result, model, print, registry, skill, web,
+    agent, company, commands, error::Result, model, print, registry, skill, web,
 };
 use std::path::PathBuf;
 
@@ -71,6 +71,21 @@ enum Commands {
     },
     /// Start the Magpie web interface on port 7070.
     Web,
+    /// Set up Magpie with company knowledge from website or PDFs.
+    Company {
+        /// Company website URL(s) to crawl and analyze
+        #[arg(long)]
+        website: Option<Vec<String>>,
+        /// Company PDF file(s) to ingest
+        #[arg(long)]
+        pdf: Option<Vec<String>>,
+        /// Vision model for brand analysis
+        #[arg(long)]
+        model: Option<String>,
+        /// Interactive mode
+        #[arg(short = 'i', long = "interactive")]
+        interactive: bool,
+    },
 }
 
 #[tokio::main]
@@ -207,6 +222,19 @@ async fn run(cli: Cli) -> Result<()> {
         Commands::Config { command } => commands::config::handle(command)?,
         Commands::Web => {
             web::start_web_server().await?;
+        }
+        Commands::Company {
+            website,
+            pdf,
+            model,
+            interactive,
+        } => {
+            company::handle(company::CompanySetupArgs {
+                website,
+                pdf,
+                model,
+                interactive,
+            })?;
         }
     }
     Ok(())
