@@ -24,3 +24,11 @@ Thumbs.db
 knowledge/company-name.txt
 knowledge/crawled-pages.json
 knowledge/brand-analysis.md
+
+# Knowledge data (generated locally, per company)
+knowledge/company-name.txt
+knowledge/company-summary.md
+knowledge/brand-voice.md
+knowledge/brand-analysis.md
+knowledge/crawled-pages.json
+knowledge/.rag-index.json
