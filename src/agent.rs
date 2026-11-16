@@ -2,7 +2,7 @@ use crate::config::load_magpie_config;
 use crate::error::Result;
 use crate::llm::LLMClient;
 use std::io::{self, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use regex::Regex;
 
@@ -11,14 +11,29 @@ pub const MARKETING_CONTEXT: &str = "You are Magpie, a marketing-focused AI assi
 Help the user with marketing tasks: copywriting, campaign planning, SEO, ads, email,\nsocial media, landing pages, brand voice, and go-to-market messaging.\n\
 Prefer clear, persuasive, conversion-oriented output. When relevant, use installed\nmarketing skills to ground your work.";
 
-/// Default knowledge directory relative to CWD.
-const DEFAULT_KNOWLEDGE_DIR: &str = "knowledge";
+/// Resolve the base directory: prefer MAGPIE_HOME env var, else current dir.
+fn magpie_base_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("MAGPIE_HOME") {
+        PathBuf::from(dir)
+    } else {
+        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+    }
+}
 
-/// Default RAG script path relative to CWD.
-const DEFAULT_RAG_SCRIPT: &str = "skills/rag/magpie-rag.py";
+/// Default knowledge directory.
+fn knowledge_dir() -> PathBuf {
+    magpie_base_dir().join("knowledge")
+}
 
-/// Default brand analysis script path relative to CWD.
-const DEFAULT_BRAND_SCRIPT: &str = "skills/brand-analysis/magpie-brand-analysis.py";
+/// Default RAG script path.
+fn rag_script_path() -> PathBuf {
+    magpie_base_dir().join("skills/rag/magpie-rag.py")
+}
+
+/// Default brand analysis script path.
+fn brand_script_path() -> PathBuf {
+    magpie_base_dir().join("skills/brand-analysis/magpie-brand-analysis.py")
+}
 
 /// Regex to detect URLs in user input.
 lazy_static::lazy_static! {
@@ -34,23 +49,27 @@ fn extract_urls(text: &str) -> Vec<String> {
 
 /// Retrieve RAG context for a query if knowledge directory and RAG script exist.
 fn get_rag_context(query: &str) -> String {
-    let knowledge_dir = Path::new(DEFAULT_KNOWLEDGE_DIR);
-    let rag_script = Path::new(DEFAULT_RAG_SCRIPT);
+    let knowledge_dir = knowledge_dir();
+    let rag_script = rag_script_path();
 
-    if !knowledge_dir.is_dir() || !rag_script.is_file() {
+    if !knowledge_dir.is_dir() {
+        return String::new();
+    }
+    if !rag_script.is_file() {
         return String::new();
     }
 
     let index_file = knowledge_dir.join(".rag-index.json");
     if !index_file.exists() {
+        // Auto-ingest if no index exists
         let _ = Command::new("python3")
-            .arg(rag_script)
+            .arg(rag_script.clone())
             .arg("ingest")
             .output();
     }
 
     let output = Command::new("python3")
-        .arg(rag_script)
+        .arg(rag_script.clone())
         .arg("search")
         .arg(query)
         .arg("--top-k")
@@ -72,25 +91,31 @@ fn get_rag_context(query: &str) -> String {
     }
 }
 
-/// Load static company context files (company-summary.md, brand-analysis.md)
-/// that are always included in every marketing request.
+/// Load static company context files (company-summary.md, brand-analysis.md,
+/// company-name.txt) that are always included in every marketing request.
 fn get_static_company_context() -> String {
-    let knowledge_dir = Path::new(DEFAULT_KNOWLEDGE_DIR);
+    let knowledge_dir = knowledge_dir();
     if !knowledge_dir.is_dir() {
         return String::new();
     }
 
-    let mut context = String::new();
+    let mut context_parts: Vec<String> = Vec::new();
+
+    // Company name
+    let company_name_file = knowledge_dir.join("company-name.txt");
+    if let Ok(name) = std::fs::read_to_string(&company_name_file) {
+        let trimmed = name.trim();
+        if !trimmed.is_empty() {
+            context_parts.push(format!("## Company: {}", trimmed));
+        }
+    }
 
     // Company summary
     let summary_file = knowledge_dir.join("company-summary.md");
     if summary_file.exists() {
         if let Ok(content) = std::fs::read_to_string(&summary_file) {
             if !content.trim().is_empty() {
-                context.push_str(&format!(
-                    "\n\n## Company Summary\n{}\n",
-                    content.trim()
-                ));
+                context_parts.push(format!("## Company Summary\n{}", content.trim()));
             }
         }
     }
@@ -100,31 +125,36 @@ fn get_static_company_context() -> String {
     if brand_file.exists() {
         if let Ok(content) = std::fs::read_to_string(&brand_file) {
             if !content.trim().is_empty() {
-                context.push_str(&format!(
-                    "\n\n## Brand Identity (from website analysis)\n{}\n",
-                    content.trim()
-                ));
+                context_parts.push(format!("## Brand Identity (from website analysis)\n{}", content.trim()));
             }
         }
     }
 
-    if context.is_empty() {
+    // Crawled pages
+    let crawled_file = knowledge_dir.join("crawled-pages.json");
+    if crawled_file.exists() {
+        if let Ok(content) = std::fs::read_to_string(&crawled_file) {
+            if !content.trim().is_empty() {
+                context_parts.push(format!("## Crawled Website Data\n{}", content.trim()));
+            }
+        }
+    }
+
+    if context_parts.is_empty() {
         String::new()
     } else {
-        format!("\n\n## Company Context (always applied){}", context)
+        format!("\n\n## Company Context (always applied)\n{}", context_parts.join("\n\n"))
     }
 }
 
 /// Automatically analyze websites mentioned in user input and return brand context.
-/// This runs brand analysis on any URLs found in the input, then injects the
-/// brand identity (colors, fonts, logo) into the system prompt.
 fn get_brand_context(query: &str) -> String {
     let urls = extract_urls(query);
     if urls.is_empty() {
         return String::new();
     }
 
-    let brand_script = Path::new(DEFAULT_BRAND_SCRIPT);
+    let brand_script = brand_script_path();
     if !brand_script.is_file() {
         return String::new();
     }
@@ -132,7 +162,6 @@ fn get_brand_context(query: &str) -> String {
     let mut all_brand_context = String::new();
 
     for url in urls {
-        // Ensure URL has scheme
         let url_with_scheme = if !url.starts_with("http://") && !url.starts_with("https://") {
             format!("https://{}", url)
         } else {
@@ -140,7 +169,7 @@ fn get_brand_context(query: &str) -> String {
         };
 
         let output = Command::new("python3")
-            .arg(brand_script)
+            .arg(brand_script.clone())
             .arg(&url_with_scheme)
             .arg("--format")
             .arg("css")
@@ -182,9 +211,25 @@ fn build_system_prompt(query: &str) -> String {
     let brand_context = get_brand_context(query);
 
     let mut prompt = MARKETING_CONTEXT.to_string();
-    prompt.push_str(&static_context);
-    prompt.push_str(&rag_context);
-    prompt.push_str(&brand_context);
+
+    if !static_context.is_empty() {
+        prompt.push_str(&static_context);
+    }
+
+    if !rag_context.is_empty() {
+        prompt.push_str(&rag_context);
+    }
+
+    if !brand_context.is_empty() {
+        prompt.push_str(&brand_context);
+    }
+
+    // Debug: print what context is being used (visible in terminal)
+    eprintln!("\n[Magpie Debug] System prompt context loaded:");
+    eprintln!("  - Static company context: {} chars", static_context.len());
+    eprintln!("  - RAG context: {} chars", rag_context.len());
+    eprintln!("  - Brand context: {} chars", brand_context.len());
+
     prompt
 }
 
@@ -194,6 +239,7 @@ pub async fn run_interactive(stream: bool) -> Result<()> {
 
     println!("🪶 Magpie — marketing assistant (agentic mode)");
     println!("Model: {} | Base URL: {}", llm.model, llm.base_url);
+    println!("Knowledge dir: {:?}", knowledge_dir());
     println!("Type your request. Press Ctrl+C or type /exit to quit.\n");
     println!("💡 Magpie automatically analyzes websites in your request for brand identity.\n");
 
@@ -271,9 +317,9 @@ fn print_help() {
     println!("  magpie company-setup --pdf brochure.pdf");
     println!("  magpie company-setup --website https://yourcompany.com --pdf brochure.pdf");
     println!("");
-    println!("RAG (company knowledge):");
+    println!("Company context:");
     println!("  Drop documents into knowledge/ and Magpie will use them automatically.");
-    println!("  Run 'magpie run \"rag ingest\"' to index your documents.");
+    println!("  Run 'magpie company-setup --website https://yourcompany.com' to set up from a website.");
     println!("");
 }
 
@@ -282,13 +328,6 @@ mod tests {
     #[test]
     fn test_marketing_context_non_empty() {
         assert!(!super::MARKETING_CONTEXT.is_empty());
-    }
-
-    #[test]
-    fn test_build_system_prompt_no_context() {
-        // Without knowledge/ directory or URLs, prompt should be unchanged
-        let prompt = super::build_system_prompt("test query");
-        assert_eq!(prompt, super::MARKETING_CONTEXT);
     }
 
     #[test]

@@ -11,9 +11,18 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::result::Result as StdResult;
+
+/// Resolve the base directory: prefer MAGPIE_HOME env var, else current dir.
+fn magpie_base_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("MAGPIE_HOME") {
+        PathBuf::from(dir)
+    } else {
+        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+    }
+}
 
 /// Shared application state for the web server.
 #[derive(Clone)]
@@ -145,9 +154,9 @@ async fn company_setup_handler(
     }
 
     // Save company name to knowledge/company-name.txt
-    let knowledge_dir = Path::new("knowledge");
+    let knowledge_dir = magpie_base_dir().join("knowledge");
     if !knowledge_dir.exists() {
-        std::fs::create_dir_all(knowledge_dir)
+        std::fs::create_dir_all(&knowledge_dir)
             .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
     }
 
@@ -172,12 +181,12 @@ async fn company_setup_handler(
 
             // Crawl the website
             let crawl_output = Command::new("python3")
-                .arg("skills/crawl/magpie-crawl.py")
+                .arg(magpie_base_dir().join("skills/crawl/magpie-crawl.py"))
                 .arg(&url_with_scheme)
                 .arg("--format")
                 .arg("json")
                 .arg("--out")
-                .arg("knowledge/crawled-pages.json")
+                .arg(knowledge_dir.join("crawled-pages.json"))
                 .output();
 
             match crawl_output {
@@ -195,12 +204,12 @@ async fn company_setup_handler(
                 .unwrap_or_default();
             if !api_key.is_empty() {
                 let brand_output = Command::new("python3")
-                    .arg("skills/brand-analysis/magpie-brand-analysis.py")
+                    .arg(magpie_base_dir().join("skills/brand-analysis/magpie-brand-analysis.py"))
                     .arg(&url_with_scheme)
                     .arg("--format")
                     .arg("md")
                     .arg("--out")
-                    .arg("knowledge/brand-analysis.md")
+                    .arg(knowledge_dir.join("brand-analysis.md"))
                     .output();
 
                 match brand_output {
@@ -219,7 +228,7 @@ async fn company_setup_handler(
 
     // Run RAG ingest
     let rag_output = Command::new("python3")
-        .arg("skills/rag/magpie-rag.py")
+        .arg(magpie_base_dir().join("skills/rag/magpie-rag.py"))
         .arg("ingest")
         .output();
 
@@ -240,7 +249,7 @@ async fn company_setup_handler(
 
 /// Check if company is already set up.
 async fn company_status_handler() -> StdResult<Json<serde_json::Value>, StatusCode> {
-    let knowledge_dir = Path::new("knowledge");
+    let knowledge_dir = magpie_base_dir().join("knowledge");
     let company_file = knowledge_dir.join("company-name.txt");
     let has_company = company_file.exists();
 
@@ -251,7 +260,7 @@ async fn company_status_handler() -> StdResult<Json<serde_json::Value>, StatusCo
 
 /// Get company name for display in header.
 async fn company_name_handler() -> StdResult<Json<serde_json::Value>, StatusCode> {
-    let knowledge_dir = Path::new("knowledge");
+    let knowledge_dir = magpie_base_dir().join("knowledge");
     let company_file = knowledge_dir.join("company-name.txt");
 
     match std::fs::read_to_string(&company_file) {
