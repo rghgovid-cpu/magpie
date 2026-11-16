@@ -11,13 +11,25 @@ pub const MARKETING_CONTEXT: &str = "You are Magpie, a marketing-focused AI assi
 Help the user with marketing tasks: copywriting, campaign planning, SEO, ads, email,\nsocial media, landing pages, brand voice, and go-to-market messaging.\n\
 Prefer clear, persuasive, conversion-oriented output. When relevant, use installed\nmarketing skills to ground your work.";
 
-/// Resolve the base directory: prefer MAGPIE_HOME env var, else current dir.
+/// Resolve the base directory: check MAGPIE_HOME, then current dir, then parent dirs.
 fn magpie_base_dir() -> PathBuf {
     if let Ok(dir) = std::env::var("MAGPIE_HOME") {
-        PathBuf::from(dir)
-    } else {
-        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+        return PathBuf::from(dir);
     }
+    if let Ok(cwd) = std::env::current_dir() {
+        // Check if knowledge/ exists in current dir or any parent
+        let mut dir = cwd.clone();
+        loop {
+            if dir.join("knowledge").is_dir() {
+                return dir;
+            }
+            if !dir.pop() {
+                break;
+            }
+        }
+        return cwd;
+    }
+    PathBuf::from(".")
 }
 
 /// Default knowledge directory.
@@ -48,7 +60,7 @@ fn extract_urls(text: &str) -> Vec<String> {
 }
 
 /// Retrieve RAG context for a query if knowledge directory and RAG script exist.
-fn get_rag_context(query: &str) -> String {
+pub fn get_rag_context(query: &str) -> String {
     let knowledge_dir = knowledge_dir();
     let rag_script = rag_script_path();
 
@@ -91,9 +103,9 @@ fn get_rag_context(query: &str) -> String {
     }
 }
 
-/// Load static company context files (company-summary.md, brand-analysis.md,
-/// company-name.txt) that are always included in every marketing request.
-fn get_static_company_context() -> String {
+/// Load static company context files (company-name.txt, company-summary.md,
+/// brand-analysis.md, crawled-pages.json) that are always included.
+pub fn get_static_company_context() -> String {
     let knowledge_dir = knowledge_dir();
     if !knowledge_dir.is_dir() {
         return String::new();
@@ -101,7 +113,7 @@ fn get_static_company_context() -> String {
 
     let mut context_parts: Vec<String> = Vec::new();
 
-    // Company name
+    // Company name (most important - show first)
     let company_name_file = knowledge_dir.join("company-name.txt");
     if let Ok(name) = std::fs::read_to_string(&company_name_file) {
         let trimmed = name.trim();
@@ -120,17 +132,17 @@ fn get_static_company_context() -> String {
         }
     }
 
-    // Brand analysis
+    // Brand analysis (colors, fonts, logo from website)
     let brand_file = knowledge_dir.join("brand-analysis.md");
     if brand_file.exists() {
         if let Ok(content) = std::fs::read_to_string(&brand_file) {
             if !content.trim().is_empty() {
-                context_parts.push(format!("## Brand Identity (from website analysis)\n{}", content.trim()));
+                context_parts.push(format!("## Brand Identity (from website)\n{}", content.trim()));
             }
         }
     }
 
-    // Crawled pages
+    // Crawled website content
     let crawled_file = knowledge_dir.join("crawled-pages.json");
     if crawled_file.exists() {
         if let Ok(content) = std::fs::read_to_string(&crawled_file) {
@@ -143,7 +155,10 @@ fn get_static_company_context() -> String {
     if context_parts.is_empty() {
         String::new()
     } else {
-        format!("\n\n## Company Context (always applied)\n{}", context_parts.join("\n\n"))
+        format!(
+            "\n\n## COMPANY CONTEXT (use this for all marketing)\n{}",
+            context_parts.join("\n\n")
+        )
     }
 }
 
@@ -204,24 +219,34 @@ fn get_brand_context(query: &str) -> String {
     )
 }
 
-/// Build the full system prompt with RAG context, static company context, and brand context.
-fn build_system_prompt(query: &str) -> String {
-    let rag_context = get_rag_context(query);
+/// Build the full system prompt with company context as the PRIMARY focus.
+pub fn build_system_prompt(query: &str) -> String {
     let static_context = get_static_company_context();
+    let rag_context = get_rag_context(query);
     let brand_context = get_brand_context(query);
 
     let mut prompt = MARKETING_CONTEXT.to_string();
 
+    // Company context comes FIRST - it's the most important
     if !static_context.is_empty() {
         prompt.push_str(&static_context);
     }
 
+    // RAG context from knowledge base
     if !rag_context.is_empty() {
         prompt.push_str(&rag_context);
     }
 
+    // Brand context from website analysis
     if !brand_context.is_empty() {
         prompt.push_str(&brand_context);
+    }
+
+    // If no company context at all, warn the user
+    if static_context.is_empty() && rag_context.is_empty() && brand_context.is_empty() {
+        prompt.push_str("\n\n## WARNING: No company context found\n");
+        prompt.push_str("Run 'magpie company-setup --website https://yourcompany.com' to set up company context.\n");
+        prompt.push_str("Without company context, all marketing will be generic.\n");
     }
 
     // Debug: print what context is being used (visible in terminal)
@@ -229,6 +254,8 @@ fn build_system_prompt(query: &str) -> String {
     eprintln!("  - Static company context: {} chars", static_context.len());
     eprintln!("  - RAG context: {} chars", rag_context.len());
     eprintln!("  - Brand context: {} chars", brand_context.len());
+    eprintln!("  - Knowledge dir: {:?}", knowledge_dir());
+    eprintln!("  - Knowledge dir exists: {}", knowledge_dir().is_dir());
 
     prompt
 }

@@ -91,15 +91,15 @@ async fn chat_handler(
     State(state): State<AppState>,
     Json(payload): Json<ChatRequest>,
 ) -> StdResult<Json<ChatResponse>, StatusCode> {
-    // Read marketing context from agent module
-    let system_prompt = crate::agent::MARKETING_CONTEXT;
+    // Read marketing context from agent module WITH company context
+    let system_prompt = crate::agent::build_system_prompt(&payload.message);
 
     let response = if state.llm.api_key.is_empty() {
         "⚠️ No LLM API key configured. Please run `magpie config llm-setup` to set up your AI provider, then try again.".to_string()
     } else {
         state
             .llm
-            .chat(system_prompt, &payload.message)
+            .chat(&system_prompt, &payload.message)
             .await
             .map_err(|_e: MagpieError| StatusCode::INTERNAL_SERVER_ERROR)?
     };
