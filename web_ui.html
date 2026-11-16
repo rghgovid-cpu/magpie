@@ -206,7 +206,83 @@
             color: var(--text-muted);
         }
 
-        /* Company setup */
+        /* Company setup hero */
+        .company-hero {
+            padding: 60px 24px;
+            background: var(--panel);
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        .company-hero h2 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: var(--text);
+        }
+
+        .company-hero p {
+            font-size: 16px;
+            color: var(--text-muted);
+            margin-bottom: 32px;
+            max-width: 600px;
+        }
+
+        .company-form {
+            max-width: 500px;
+            background: var(--surface);
+            padding: 32px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+        }
+
+        .company-form label {
+            display: block;
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .company-form input {
+            width: 100%;
+            padding: 14px 18px;
+            background: #0f172a;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text);
+            font-size: 16px;
+            outline: none;
+            margin-bottom: 20px;
+            box-sizing: border-box;
+        }
+
+        .company-form input:focus {
+            border-color: var(--accent);
+        }
+
+        .company-form button {
+            width: 100%;
+            padding: 16px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .company-form button:hover {
+            background: var(--accent-hover);
+        }
+
+        .company-form button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
         .company-setup {
             padding: 20px;
             border-top: 1px solid var(--border);
@@ -555,21 +631,24 @@
             <div class="skills-list" id="skills-list">
                 <div class="empty-state">Loading skills...</div>
             </div>
+        </aside>
+
+        <!-- Company Setup Hero - Main Focus -->
+        <div class="company-hero" id="company-hero">
+            <h2>🏢 Set Up Your Company</h2>
+            <p>Start by telling Magpie about your company. This ensures all marketing output is on-brand, accurate, and specific to your business.</p>
+            <div class="company-form">
+                <label for="company-name">Company Name</label>
+                <input type="text" id="company-name" placeholder="e.g. Acme Corp" />
+                <label for="company-website">Website URL (optional)</label>
+                <input type="text" id="company-website" placeholder="https://example.com" />
+                <button id="company-setup-btn">Set Up Company</button>
+                <div id="company-result" class="company-result"></div>
+            </div>
         </div>
 
-        <!-- Company Setup -->
-        <div class="company-setup">
-            <h3>🏢 Company Setup</h3>
-            <label for="company-name">Company Name</label>
-            <input type="text" id="company-name" placeholder="e.g. Acme Corp" />
-            <label for="company-website">Website URL (optional)</label>
-            <input type="text" id="company-website" placeholder="https://example.com" />
-            <button id="company-setup-btn">Set Up Company</button>
-            <div id="company-result" class="company-result"></div>
-        </div>
-    </aside>
-
-        <div class="chat-container">
+        <!-- Chat Area - Shown after company setup -->
+        <div class="chat-container" id="chat-container" style="display: none;">
             <div class="chat-header">
                 <h1>New Conversation</h1>
                 <p>Marketing-focused AI assistant</p>
@@ -618,6 +697,8 @@
         const companyWebsiteEl = document.getElementById('company-website');
         const companySetupBtn = document.getElementById('company-setup-btn');
         const companyResultEl = document.getElementById('company-result');
+        const companyHeroEl = document.getElementById('company-hero');
+        const chatContainerEl = document.getElementById('chat-container');
 
         // Initialize
         async function init() {
@@ -633,19 +714,37 @@
             sendBtn.addEventListener('click', sendMessage);
             companySetupBtn.addEventListener('click', setupCompany);
 
-            // Auto-focus
-            inputEl.focus();
+            // Auto-focus company name input
+            companyNameEl.focus();
         }
 
         async function checkCompanySetup() {
             try {
-                const res = await fetch(`${API_BASE}/api/config/llm`);
+                // Check if company is already set up by looking for company-name.txt
+                // We'll use a simple endpoint or check if knowledge dir has files
+                const res = await fetch(`${API_BASE}/api/company-status`);
                 const data = await res.json();
-                // Just check if knowledge dir has company-name.txt
-                // We'll check by trying to read it via a simple endpoint or just show the form
+                if (data.hasCompany) {
+                    showChat();
+                } else {
+                    showCompanySetup();
+                }
             } catch (err) {
-                // Ignore
+                // If endpoint doesn't exist yet, show company setup by default
+                showCompanySetup();
             }
+        }
+
+        function showCompanySetup() {
+            companyHeroEl.style.display = 'block';
+            chatContainerEl.style.display = 'none';
+            companyNameEl.focus();
+        }
+
+        function showChat() {
+            companyHeroEl.style.display = 'none';
+            chatContainerEl.style.display = 'flex';
+            inputEl.focus();
         }
 
         async function setupCompany() {
@@ -676,8 +775,10 @@
 
                 if (data.success) {
                     showCompanyResult(data.message, true);
-                    companyNameEl.value = "";
-                    companyWebsiteEl.value = "";
+                    // Small delay then switch to chat
+                    setTimeout(() => {
+                        showChat();
+                    }, 1500);
                 } else {
                     showCompanyResult(data.message || "Setup failed", false);
                 }

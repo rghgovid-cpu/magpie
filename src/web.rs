@@ -66,6 +66,7 @@ pub fn router(llm: LLMClient) -> Router {
         .route("/api/skills", get(list_skills_handler))
         .route("/api/config/llm", get(llm_config_handler))
         .route("/api/company-setup", post(company_setup_handler))
+        .route("/api/company-status", get(company_status_handler))
         .with_state(AppState { llm })
 }
 
@@ -234,6 +235,17 @@ async fn company_setup_handler(
         success: true,
         message: messages.join("\n"),
     }))
+}
+
+/// Check if company is already set up.
+async fn company_status_handler() -> StdResult<Json<serde_json::Value>, StatusCode> {
+    let knowledge_dir = Path::new("knowledge");
+    let company_file = knowledge_dir.join("company-name.txt");
+    let has_company = company_file.exists();
+
+    Ok(Json(serde_json::json!({
+        "has_company": has_company
+    })))
 }
 
 /// Start the web server on port 7070.
