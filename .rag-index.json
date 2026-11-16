@@ -1,0 +1,48 @@
+{
+  "created_at": "2026-11-16T03:40:29.468346+00:00",
+  "document_count": 2,
+  "chunk_count": 8,
+  "knowledge_dir": "/home/rgh/Documents/Default Project/magpie-rs/knowledge",
+  "chunks": [
+    {
+      "source": "brand-voice.md",
+      "chunk_index": 0,
+      "text": "# Acme Corp — Brand Voice Guidelines ## Voice Personality We are the smart friend who knows marketing. Not the corporate suit. Not the hype-beast. Just someone who gets it and can explain it simply. ## Do - Use contractions (we're, don't, can't) - Write short sentences (under 20 words when possible) - Use active voice - Address the reader as \"you\" - Be specific with numbers and examples - Show, don't tell (use examples instead of adjectives) ## Don't - Use phrases like \"synergy,\" \"leverage,\" \"pa"
+    },
+    {
+      "source": "brand-voice.md",
+      "chunk_index": 1,
+      "text": "on't - Use phrases like \"synergy,\" \"leverage,\" \"paradigm shift,\" \"game-changer\" - Write in passive voice - Use ALL CAPS for emphasis - Make claims like \"best in class\" or \"industry leading\" without proof - Write like a brochure ## Examples ### Before (corporate) > Our enterprise-grade solution leverages synergistic AI capabilities to > paradigm-shift your marketing workflows. ### After (Acme voice) > Our AI helps your marketing team write better copy, faster. No jargon required. ## Channel-Speci"
+    },
+    {
+      "source": "brand-voice.md",
+      "chunk_index": 2,
+      "text": "copy, faster. No jargon required. ## Channel-Specific Tone - **Email**: Conversational, like writing to a colleague - **Ads**: Punchy, benefit-first, under character limits - **Landing pages**: Clear headline, proof, one call to action - **Social media**: Short, witty, emoji-okay (sparingly)"
+    },
+    {
+      "source": "company-overview.md",
+      "chunk_index": 0,
+      "text": "# Acme Corp — Company Overview Acme Corp is a B2B SaaS company that helps marketing teams automate their campaign workflows. Our flagship product is **Magpie Marketing OS**, an AI-powered platform for copywriting, SEO, ad management, and email automation."
+    },
+    {
+      "source": "company-overview.md",
+      "chunk_index": 1,
+      "text": "writing, SEO, ad management, and email automation. ## Pricing Tiers - **Starter**: $49/month — up to 3 users, 5,000 words/month, basic templates - **Professional**: $149/month — up to 10 users, 50,000 words/month, advanced templates, A/B testing - **Enterprise**: $499/month — unlimited users, 500,000 words/month, custom API, dedicated support ## Brand Voice - **Tone**: Helpful, witty, direct - **Do**: Use plain language, be concise, show personality - **Don't**: Use marketing jargon, be overly f"
+    },
+    {
+      "source": "company-overview.md",
+      "chunk_index": 2,
+      "text": "ity - **Don't**: Use marketing jargon, be overly formal, make exaggerated claims - **Style**: Write like a smart friend who knows marketing, not a corporate brochure ## Target Audience - Marketing managers at B2B SaaS companies (20–200 employees) - Marketing agencies managing multiple clients - Freelance copywriters and content marketers ## Key Features - AI-generated email subject lines and body copy - Landing page copywriter with conversion templates - Facebook/LinkedIn/Google ad copy generato"
+    },
+    {
+      "source": "company-overview.md",
+      "chunk_index": 3,
+      "text": "plates - Facebook/LinkedIn/Google ad copy generator - SEO blog post optimizer with keyword suggestions - Brand voice enforcement across all output - PDF and Word export for client presentations ## Competitive Positioning Unlike generic AI writing tools, Magpie is built specifically for marketing teams. We understand campaign structure, brand guidelines, and conversion-focused copy. Our output is ready to publish, not just a first draft. ## Common Objections - \"Is this just another GPT wrapper?\""
+    },
+    {
+      "source": "company-overview.md",
+      "chunk_index": 4,
+      "text": "Objections - \"Is this just another GPT wrapper?\" → No, we're built for marketing workflows with brand voice enforcement. - \"Is my data safe?\" → Yes, all processing is on-premise or via your chosen API provider. - \"Do I need technical skills?\" → No, Magpie works through natural language commands."
+    }
+  ]
+}
