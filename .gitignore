@@ -19,3 +19,8 @@ Thumbs.db
 
 # RAG index (generated locally, don't commit)
 .rag-index.json
+
+# Knowledge data (generated locally)
+knowledge/company-name.txt
+knowledge/crawled-pages.json
+knowledge/brand-analysis.md
