@@ -67,6 +67,7 @@ pub fn router(llm: LLMClient) -> Router {
         .route("/api/config/llm", get(llm_config_handler))
         .route("/api/company-setup", post(company_setup_handler))
         .route("/api/company-status", get(company_status_handler))
+        .route("/api/company-name", get(company_name_handler))
         .with_state(AppState { llm })
 }
 
@@ -246,6 +247,21 @@ async fn company_status_handler() -> StdResult<Json<serde_json::Value>, StatusCo
     Ok(Json(serde_json::json!({
         "has_company": has_company
     })))
+}
+
+/// Get company name for display in header.
+async fn company_name_handler() -> StdResult<Json<serde_json::Value>, StatusCode> {
+    let knowledge_dir = Path::new("knowledge");
+    let company_file = knowledge_dir.join("company-name.txt");
+
+    match std::fs::read_to_string(&company_file) {
+        Ok(name) => Ok(Json(serde_json::json!({
+            "company_name": name.trim()
+        }))),
+        Err(_) => Ok(Json(serde_json::json!({
+            "company_name": ""
+        }))),
+    }
 }
 
 /// Start the web server on port 7070.

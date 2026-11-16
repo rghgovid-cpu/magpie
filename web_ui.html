@@ -82,6 +82,96 @@
             color: var(--text-muted);
         }
 
+        /* Company display in header */
+        .company-display {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-right: 16px;
+            padding: 6px 12px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+        }
+
+        .company-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .company-name {
+            font-size: 14px;
+            color: var(--text);
+            font-weight: 700;
+            max-width: 150px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .change-company-btn {
+            background: transparent;
+            color: var(--accent);
+            border: 1px solid var(--accent);
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-left: 8px;
+        }
+
+        .change-company-btn:hover {
+            background: var(--accent);
+            color: white;
+        }
+
+        /* Company display in header */
+        .company-display {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-right: 16px;
+            padding: 6px 12px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+        }
+
+        .company-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .company-name {
+            font-size: 14px;
+            color: var(--text);
+            font-weight: 700;
+            max-width: 150px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .change-company-btn {
+            background: transparent;
+            color: var(--accent);
+            border: 1px solid var(--accent);
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-left: 8px;
+        }
+
+        .change-company-btn:hover {
+            background: var(--accent);
+            color: white;
+        }
+
         .status-dot {
             width: 8px;
             height: 8px;
@@ -616,6 +706,11 @@
             <span>Magpie</span>
         </div>
         <div class="header-right">
+            <div class="company-display" id="company-display" style="display: none;">
+                <span class="company-label">Company:</span>
+                <span class="company-name" id="company-name-display"></span>
+                <button class="change-company-btn" id="change-company-btn">Change</button>
+            </div>
             <div class="status-indicator">
                 <div class="status-dot" id="status-dot"></div>
                 <span id="status-text">Checking LLM...</span>
@@ -700,6 +795,11 @@
         const companyHeroEl = document.getElementById('company-hero');
         const chatContainerEl = document.getElementById('chat-container');
 
+        // Company display elements
+        const companyDisplayEl = document.getElementById('company-display');
+        const companyNameDisplayEl = document.getElementById('company-name-display');
+        const changeCompanyBtn = document.getElementById('change-company-btn');
+
         // Initialize
         async function init() {
             await loadSkills();
@@ -713,6 +813,10 @@
 
             sendBtn.addEventListener('click', sendMessage);
             companySetupBtn.addEventListener('click', setupCompany);
+            changeCompanyBtn.addEventListener('click', () => {
+                showCompanySetup();
+                companyNameEl.focus();
+            });
 
             // Auto-focus company name input
             companyNameEl.focus();
@@ -720,30 +824,42 @@
 
         async function checkCompanySetup() {
             try {
-                // Check if company is already set up by looking for company-name.txt
-                // We'll use a simple endpoint or check if knowledge dir has files
                 const res = await fetch(`${API_BASE}/api/company-status`);
                 const data = await res.json();
-                if (data.hasCompany) {
+                if (data.has_company) {
+                    await loadCompanyName();
                     showChat();
                 } else {
                     showCompanySetup();
                 }
             } catch (err) {
-                // If endpoint doesn't exist yet, show company setup by default
                 showCompanySetup();
+            }
+        }
+
+        async function loadCompanyName() {
+            try {
+                const res = await fetch(`${API_BASE}/api/company-name`);
+                const data = await res.json();
+                if (data.company_name) {
+                    companyNameDisplayEl.textContent = data.company_name;
+                }
+            } catch (err) {
+                // Ignore
             }
         }
 
         function showCompanySetup() {
             companyHeroEl.style.display = 'block';
             chatContainerEl.style.display = 'none';
+            companyDisplayEl.style.display = 'none';
             companyNameEl.focus();
         }
 
         function showChat() {
             companyHeroEl.style.display = 'none';
             chatContainerEl.style.display = 'flex';
+            companyDisplayEl.style.display = 'flex';
             inputEl.focus();
         }
 
@@ -775,6 +891,7 @@
 
                 if (data.success) {
                     showCompanyResult(data.message, true);
+                    companyNameDisplayEl.textContent = companyName;
                     // Small delay then switch to chat
                     setTimeout(() => {
                         showChat();
@@ -794,7 +911,7 @@
             companyResultEl.textContent = "";
             const successLine = document.createElement("div");
             successLine.className = success ? "success-line" : "warn-line";
-            successLine.textContent = success ? "✅ " + message : "❌ " + message;
+            successLine.textContent = success ? "\u2705 " + message : "\u274c " + message;
             companyResultEl.appendChild(successLine);
             companyResultEl.classList.add("show");
         }
