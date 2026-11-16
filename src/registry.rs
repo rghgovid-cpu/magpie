@@ -170,6 +170,36 @@ pub fn builtin_skills() -> Vec<BuiltinSkill> {
             description: "Define and enforce brand voice, tone, do/don't wording, and forbidden phrases across all marketing assets.".to_string(),
             tags: vec!["brand".into(), "voice".into(), "guidelines".into()],
         },
+        BuiltinSkill {
+            id: "print".to_string(),
+            name: "Print".to_string(),
+            description: "Print documents to PDF or Word in A4 and US Letter sizes. No external programs required.".to_string(),
+            tags: vec!["print".into(), "pdf".into(), "word".into(), "docx".into(), "a4".into(), "letter".into()],
+        },
+        BuiltinSkill {
+            id: "crawl".to_string(),
+            name: "Web Crawler".to_string(),
+            description: "Crawl websites and export structured data (CSV/JSON) ready for CRM import. Extracts title, description, contacts, links, and metadata.".to_string(),
+            tags: vec!["crawl".into(), "web".into(), "crm".into(), "csv".into(), "json".into(), "extract".into(), "leads".into()],
+        },
+        BuiltinSkill {
+            id: "web-search".to_string(),
+            name: "Web Search".to_string(),
+            description: "Search the web and return structured results (title, URL, snippet) that can be fed into the crawler skill for CRM extraction.".to_string(),
+            tags: vec!["search".into(), "web".into(), "google".into(), "duckduckgo".into(), "query".into(), "results".into()],
+        },
+        BuiltinSkill {
+            id: "brand-analysis".to_string(),
+            name: "Brand Analysis".to_string(),
+            description: "Analyze company websites with a vision model to extract logos, fonts, colors, and brand identity for marketing use.".to_string(),
+            tags: vec!["brand".into(), "vision".into(), "website".into(), "logo".into(), "fonts".into(), "colors".into()],
+        },
+        BuiltinSkill {
+            id: "rag".to_string(),
+            name: "RAG".to_string(),
+            description: "Retrieval-Augmented Generation for company-specific knowledge. Ingest company documents and use them to refine marketing outputs with accurate, on-brand context.".to_string(),
+            tags: vec!["rag".into(), "retrieval".into(), "knowledge".into(), "company".into(), "context".into()],
+        },
     ]
 }
 
@@ -222,6 +252,6 @@ mod tests {
 
     #[test]
     fn test_builtin_skills_count() {
-        assert_eq!(builtin_skills().len(), 5);
+        assert_eq!(builtin_skills().len(), 10);
     }
 }
