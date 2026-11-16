@@ -11,6 +11,8 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
+use std::path::Path;
+use std::process::Command;
 use std::result::Result as StdResult;
 
 /// Shared application state for the web server.
@@ -42,6 +44,20 @@ pub struct SkillItem {
     pub description: String,
 }
 
+/// Company setup request.
+#[derive(Debug, Deserialize)]
+pub struct CompanySetupRequest {
+    pub company_name: String,
+    pub website_url: Option<String>,
+}
+
+/// Company setup response.
+#[derive(Debug, Serialize)]
+pub struct CompanySetupResponse {
+    pub success: bool,
+    pub message: String,
+}
+
 /// Create the axum router with all routes.
 pub fn router(llm: LLMClient) -> Router {
     Router::new()
@@ -49,6 +65,7 @@ pub fn router(llm: LLMClient) -> Router {
         .route("/api/chat", post(chat_handler))
         .route("/api/skills", get(list_skills_handler))
         .route("/api/config/llm", get(llm_config_handler))
+        .route("/api/company-setup", post(company_setup_handler))
         .with_state(AppState { llm })
 }
 
@@ -111,6 +128,112 @@ async fn llm_config_handler() -> StdResult<Json<serde_json::Value>, StatusCode> 
         "base_url": llm.base_url.as_deref().unwrap_or("https://api.openai.com/v1"),
         "model": llm.model.as_deref().unwrap_or("gpt-4o-mini"),
     })))
+}
+
+/// Handle company setup — saves company info and runs crawler/brand analysis/RAG ingest.
+async fn company_setup_handler(
+    Json(payload): Json<CompanySetupRequest>,
+) -> StdResult<Json<CompanySetupResponse>, StatusCode> {
+    let company_name = payload.company_name.trim();
+    if company_name.is_empty() {
+        return Ok(Json(CompanySetupResponse {
+            success: false,
+            message: "Company name is required".to_string(),
+        }));
+    }
+
+    // Save company name to knowledge/company-name.txt
+    let knowledge_dir = Path::new("knowledge");
+    if !knowledge_dir.exists() {
+        std::fs::create_dir_all(knowledge_dir)
+            .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+
+    let company_file = knowledge_dir.join("company-name.txt");
+    std::fs::write(&company_file, company_name)
+        .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let mut messages: Vec<String> = Vec::new();
+    messages.push(format!("✅ Company name saved: {}", company_name));
+
+    // If website URL provided, run crawl + brand analysis + RAG ingest
+    if let Some(url) = &payload.website_url {
+        let url_trimmed = url.trim();
+        if !url_trimmed.is_empty() {
+            let url_with_scheme = if !url_trimmed.starts_with("http://")
+                && !url_trimmed.starts_with("https://")
+            {
+                format!("https://{}", url_trimmed)
+            } else {
+                url_trimmed.to_string()
+            };
+
+            // Crawl the website
+            let crawl_output = Command::new("python3")
+                .arg("skills/crawl/magpie-crawl.py")
+                .arg(&url_with_scheme)
+                .arg("--format")
+                .arg("json")
+                .arg("--out")
+                .arg("knowledge/crawled-pages.json")
+                .output();
+
+            match crawl_output {
+                Ok(out) if out.status.success() => {
+                    messages.push(format!("✅ Crawled: {}", url_with_scheme));
+                }
+                _ => {
+                    messages.push(format!("⚠️  Crawl failed for: {}", url_with_scheme));
+                }
+            }
+
+            // Brand analysis (needs API key)
+            let api_key = std::env::var("MAGPIE_API_KEY")
+                .or_else(|_| std::env::var("OPENAI_API_KEY"))
+                .unwrap_or_default();
+            if !api_key.is_empty() {
+                let brand_output = Command::new("python3")
+                    .arg("skills/brand-analysis/magpie-brand-analysis.py")
+                    .arg(&url_with_scheme)
+                    .arg("--format")
+                    .arg("md")
+                    .arg("--out")
+                    .arg("knowledge/brand-analysis.md")
+                    .output();
+
+                match brand_output {
+                    Ok(out) if out.status.success() => {
+                        messages.push(format!("✅ Brand analysis: {}", url_with_scheme));
+                    }
+                    _ => {
+                        messages.push(format!("⚠️  Brand analysis failed for: {}", url_with_scheme));
+                    }
+                }
+            } else {
+                messages.push("⚠️  Brand analysis skipped (no MAGPIE_API_KEY)".to_string());
+            }
+        }
+    }
+
+    // Run RAG ingest
+    let rag_output = Command::new("python3")
+        .arg("skills/rag/magpie-rag.py")
+        .arg("ingest")
+        .output();
+
+    match rag_output {
+        Ok(out) if out.status.success() => {
+            messages.push("✅ RAG index built".to_string());
+        }
+        _ => {
+            messages.push("⚠️  RAG ingest failed".to_string());
+        }
+    }
+
+    Ok(Json(CompanySetupResponse {
+        success: true,
+        message: messages.join("\n"),
+    }))
 }
 
 /// Start the web server on port 7070.

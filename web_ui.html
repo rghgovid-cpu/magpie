@@ -206,6 +206,84 @@
             color: var(--text-muted);
         }
 
+        /* Company setup */
+        .company-setup {
+            padding: 20px;
+            border-top: 1px solid var(--border);
+            background: var(--panel);
+        }
+
+        .company-setup h3 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--text);
+        }
+
+        .company-setup label {
+            display: block;
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+
+        .company-setup input {
+            width: 100%;
+            padding: 8px 12px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 14px;
+            margin-bottom: 12px;
+            box-sizing: border-box;
+        }
+
+        .company-setup button {
+            width: 100%;
+            padding: 10px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .company-setup button:hover {
+            background: var(--accent-hover);
+        }
+
+        .company-setup button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .company-result {
+            margin-top: 12px;
+            padding: 10px;
+            background: var(--surface);
+            border-radius: 6px;
+            font-size: 12px;
+            color: var(--text-muted);
+            display: none;
+        }
+
+        .company-result.show {
+            display: block;
+        }
+
+        .company-result .success-line {
+            color: var(--success);
+            margin-bottom: 6px;
+        }
+
+        .company-result .warn-line {
+            color: var(--text-muted);
+            font-size: 11px;
+        }
+
         /* Chat area */
         .chat-container {
             flex: 1;
@@ -477,7 +555,19 @@
             <div class="skills-list" id="skills-list">
                 <div class="empty-state">Loading skills...</div>
             </div>
-        </aside>
+        </div>
+
+        <!-- Company Setup -->
+        <div class="company-setup">
+            <h3>🏢 Company Setup</h3>
+            <label for="company-name">Company Name</label>
+            <input type="text" id="company-name" placeholder="e.g. Acme Corp" />
+            <label for="company-website">Website URL (optional)</label>
+            <input type="text" id="company-website" placeholder="https://example.com" />
+            <button id="company-setup-btn">Set Up Company</button>
+            <div id="company-result" class="company-result"></div>
+        </div>
+    </aside>
 
         <div class="chat-container">
             <div class="chat-header">
@@ -523,10 +613,17 @@
         const statusDot = document.getElementById('status-dot');
         const statusText = document.getElementById('status-text');
 
+        // Company setup elements
+        const companyNameEl = document.getElementById('company-name');
+        const companyWebsiteEl = document.getElementById('company-website');
+        const companySetupBtn = document.getElementById('company-setup-btn');
+        const companyResultEl = document.getElementById('company-result');
+
         // Initialize
         async function init() {
             await loadSkills();
             await checkLLMStatus();
+            await checkCompanySetup();
 
             // Enter key
             inputEl.addEventListener('keypress', (e) => {
@@ -534,9 +631,71 @@
             });
 
             sendBtn.addEventListener('click', sendMessage);
+            companySetupBtn.addEventListener('click', setupCompany);
 
             // Auto-focus
             inputEl.focus();
+        }
+
+        async function checkCompanySetup() {
+            try {
+                const res = await fetch(`${API_BASE}/api/config/llm`);
+                const data = await res.json();
+                // Just check if knowledge dir has company-name.txt
+                // We'll check by trying to read it via a simple endpoint or just show the form
+            } catch (err) {
+                // Ignore
+            }
+        }
+
+        async function setupCompany() {
+            const companyName = companyNameEl.value.trim();
+            const websiteUrl = companyWebsiteEl.value.trim();
+
+            if (!companyName) {
+                showCompanyResult("Please enter a company name", false);
+                return;
+            }
+
+            companySetupBtn.disabled = true;
+            companySetupBtn.textContent = "Setting up...";
+            companyResultEl.classList.remove('show');
+            companyResultEl.textContent = "";
+
+            try {
+                const res = await fetch(`${API_BASE}/api/company-setup`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        company_name: companyName,
+                        website_url: websiteUrl || undefined,
+                    }),
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    showCompanyResult(data.message, true);
+                    companyNameEl.value = "";
+                    companyWebsiteEl.value = "";
+                } else {
+                    showCompanyResult(data.message || "Setup failed", false);
+                }
+            } catch (err) {
+                showCompanyResult("Error: " + err.message, false);
+            } finally {
+                companySetupBtn.disabled = false;
+                companySetupBtn.textContent = "Set Up Company";
+            }
+        }
+
+        function showCompanyResult(message, success) {
+            companyResultEl.textContent = "";
+            const successLine = document.createElement("div");
+            successLine.className = success ? "success-line" : "warn-line";
+            successLine.textContent = success ? "✅ " + message : "❌ " + message;
+            companyResultEl.appendChild(successLine);
+            companyResultEl.classList.add("show");
         }
 
         async function checkLLMStatus() {
