@@ -62,8 +62,8 @@ magpie print brand-guidelines.md --format pdf --size a4 --out brand-guidelines.p
 
 ## Requirements
 
+- **fetchright** (npm): For website screenshots (`npm install -g fetchright` or use npx)
 - **Vision-capable LLM**: Nemotron-3.5-Super-VL-Free, GPT-4V, Claude 3, etc.
-- **Playwright** (Python): For website screenshots (`pip install playwright && playwright install chromium`)
 - **API key**: Set `MAGPIE_API_KEY` or `OPENAI_API_KEY`
 
 ## Commands
@@ -85,7 +85,7 @@ magpie run "brand-analyze https://example.com https://example.com/about --format
 
 ## How it works
 
-1. Takes screenshots of website pages using Playwright (headless Chromium)
+1. Takes screenshots of website pages using `fetchright` (npm package)
 2. Sends screenshots to a vision-capable LLM
 3. LLM extracts colors, fonts, logo, and visual style
 4. Outputs structured CSS, JSON, or Markdown

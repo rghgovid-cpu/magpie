@@ -10,8 +10,7 @@ Usage:
     python3 magpie-brand-analysis.py <url1> <url2> ... [--format css] [--out brand.css]
 
 Requirements:
-    pip install playwright
-    playwright install chromium
+    npm install -g fetchright   (or use npx fetchright)
     MAGPIE_API_KEY or OPENAI_API_KEY environment variable
     Vision-capable model (Nemotron-3.5-Super-VL-Free, GPT-4V, Claude 3, etc.)
 """
@@ -21,6 +20,9 @@ import os
 import re
 import json
 import base64
+import subprocess
+import tempfile
+import glob
 import argparse
 from pathlib import Path
 from datetime import datetime, timezone
@@ -31,35 +33,60 @@ try:
 except ImportError:
     HAS_REQUESTS = False
 
-try:
-    from playwright.sync_api import sync_playwright
-    HAS_PLAYWRIGHT = True
-except ImportError:
-    HAS_PLAYWRIGHT = False
 
-
-def take_screenshot(url, output_path=None, width=1280, height=800):
-    """Take a screenshot of a webpage using Playwright."""
-    if not HAS_PLAYWRIGHT:
-        print(f"Error: Playwright not installed. Run: pip install playwright && playwright install chromium", file=sys.stderr)
-        return None
-
+def take_screenshot_fetchright(url, output_path=None):
+    """Take a screenshot of a webpage using fetchright (npm package)."""
     try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page(viewport={"width": width, "height": height})
-            page.goto(url, wait_until="networkidle", timeout=30000)
-            # Wait a bit for fonts and images to load
-            page.wait_for_timeout(2000)
-            screenshot_bytes = page.screenshot(full_page=False)
-            browser.close()
+        # Create a temp file for the screenshot if no output path given
+        if output_path is None:
+            tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+            output_path = tmp.name
+            tmp.close()
 
-        if output_path:
-            with open(output_path, "wb") as f:
-                f.write(screenshot_bytes)
+        # Run fetchright via npx
+        result = subprocess.run(
+            ["npx", "fetchright", url, "--output", output_path],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
 
-        # Return base64 encoded
+        if result.returncode != 0:
+            print(f"fetchright error: {result.stderr}", file=sys.stderr)
+            # Try without --output flag (some versions save to current dir)
+            result2 = subprocess.run(
+                ["npx", "fetchright", url],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            if result2.returncode != 0:
+                print(f"fetchright fallback error: {result2.stderr}", file=sys.stderr)
+                return None
+            # Look for the screenshot file in current directory
+            # Look for the screenshot file in current directory
+            png_files = glob.glob("*.png")
+            if png_files:
+                output_path = png_files[0]
+            else:
+                return None
+
+        # Read and base64 encode the screenshot
+        with open(output_path, "rb") as f:
+            screenshot_bytes = f.read()
+
+        # Clean up temp file if we created one
+        if output_path and output_path.startswith(tempfile.gettempdir()):
+            try:
+                os.unlink(output_path)
+            except OSError:
+                pass
+
         return base64.b64encode(screenshot_bytes).decode("utf-8")
+    except FileNotFoundError:
+        print("Error: npx or fetchright not found.", file=sys.stderr)
+        print("Install: npm install -g fetchright", file=sys.stderr)
+        return None
     except Exception as e:
         print(f"Error taking screenshot of {url}: {e}", file=sys.stderr)
         return None
@@ -202,8 +229,8 @@ def format_markdown(brand_data, url):
 
 def analyze_website(url, model, api_key, base_url, output_format="css", output_file=None):
     """Analyze a single website and return brand data."""
-    print(f"Taking screenshot of {url}...", file=sys.stderr)
-    image_b64 = take_screenshot(url)
+    print(f"Taking screenshot of {url} with fetchright...", file=sys.stderr)
+    image_b64 = take_screenshot_fetchright(url)
     if not image_b64:
         return None
 
@@ -272,12 +299,6 @@ def main():
 
     base_url = os.environ.get("MAGPIE_BASE_URL", "https://api.openai.com/v1")
     model = args.model or os.environ.get("MAGPIE_MODEL", "nemotron-3.5-super-vl-free")
-
-    # Check Playwright
-    if not HAS_PLAYWRIGHT:
-        print("Error: Playwright not installed.", file=sys.stderr)
-        print("Install: pip install playwright && playwright install chromium", file=sys.stderr)
-        sys.exit(1)
 
     # Analyze each URL
     results = []

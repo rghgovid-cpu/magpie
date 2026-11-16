@@ -10,8 +10,7 @@
 #   ./magpie-brand-analysis-helper.sh https://site.com md brand.md
 #
 # Requirements:
-#   pip install playwright
-#   playwright install chromium
+#   npm install -g fetchright   (or use npx fetchright)
 #   MAGPIE_API_KEY or OPENAI_API_KEY environment variable
 #   Vision-capable model (Nemotron-3.5-Super-VL-Free, GPT-4V, Claude 3, etc.)
 
