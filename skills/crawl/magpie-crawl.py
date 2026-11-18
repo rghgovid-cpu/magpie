@@ -5,16 +5,22 @@ Extracts CRM-ready data (title, company, emails, phones, address, etc.)
 and outputs CSV or JSON.
 
 Usage:
-    python3 magpie-crawl.py <url> [--format csv|json] [--out <file>]
+    python3 magpie-crawl.py <url> [--format csv|json] [--out <file>] [--limit <n>]
     python3 magpie-crawl.py <url1> <url2> ... [--format csv] [--out leads.csv]
+
+Daily quota:
+    By default, crawling is limited to 200 records per day. The count is
+    stored in ~/.config/magpie/crawl_state.json and resets at midnight UTC.
+    Use --limit to override for a single run (e.g. --limit 50).
 """
 
 import sys
+import os
 import re
 import csv
 import json
 import argparse
-from datetime import datetime, timezone
+from datetime import datetime
 from urllib.parse import urljoin, urlparse
 from html import unescape
 
@@ -24,6 +30,13 @@ try:
     HAS_REQUESTS = True
 except ImportError:
     HAS_REQUESTS = False
+
+# Default daily record limit
+DAILY_LIMIT = 200
+
+# State file to track daily crawl count
+MAGPIE_CONFIG_DIR = os.path.expanduser("~/.config/magpie")
+CRAWL_STATE_FILE = os.path.join(MAGPIE_CONFIG_DIR, "crawl_state.json")
 
 
 def fetch_html(url):
@@ -153,6 +166,46 @@ def extract_contact_name(soup, text):
     return ""
 
 
+def load_crawl_state():
+    """Load the daily crawl state from disk.
+
+    Returns a dict with 'date' (YYYY-MM-DD) and 'count' (int).
+    Resets count to 0 if the stored date is not today (local time).
+    """
+    today = datetime.now().strftime("%Y-%m-%d")
+    default = {"date": today, "count": 0}
+
+    if not os.path.exists(CRAWL_STATE_FILE):
+        return default
+
+    try:
+        with open(CRAWL_STATE_FILE, "r", encoding="utf-8") as f:
+            state = json.load(f)
+        # Reset if it's a new day
+        if state.get("date") != today:
+            state = {"date": today, "count": 0}
+        # Ensure required fields
+        if "count" not in state:
+            state["count"] = 0
+        if "date" not in state:
+            state["date"] = today
+        return state
+    except (json.JSONDecodeError, OSError):
+        return default
+
+
+def save_crawl_state(state):
+    """Persist the daily crawl state to disk."""
+    try:
+        os.makedirs(MAGPIE_CONFIG_DIR, exist_ok=True)
+        tmp_file = CRAWL_STATE_FILE + ".tmp"
+        with open(tmp_file, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=2)
+        os.replace(tmp_file, CRAWL_STATE_FILE)
+    except OSError as e:
+        print(f"Warning: could not save crawl state: {e}", file=sys.stderr)
+
+
 def crawl_url(url):
     """Crawl a single URL and return a CRM-ready record."""
     html, final_url = fetch_html(url)
@@ -168,7 +221,7 @@ def crawl_url(url):
             "address": "",
             "contact_name": "",
             "links": "",
-            "crawl_date": datetime.now(timezone.utc).isoformat(),
+            "crawl_date": datetime.now().isoformat(),
             "status": "error",
         }
 
@@ -238,7 +291,7 @@ def crawl_url(url):
         "address": address,
         "contact_name": contact_name,
         "links": "; ".join(links[:20]),  # limit to 20 links
-        "crawl_date": datetime.now(timezone.utc).isoformat(),
+        "crawl_date": datetime.now().isoformat(),
         "status": "success",
     }
 
@@ -288,15 +341,58 @@ def main():
         default=None,
         help="Output file (default: leads.csv or leads.json)",
     )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=DAILY_LIMIT,
+        help=f"Maximum records to crawl today (default: {DAILY_LIMIT})",
+    )
     args = parser.parse_args()
 
-    # Crawl all URLs
+    # Load daily crawl state
+    state = load_crawl_state()
+    remaining = args.limit - state["count"]
+
+    if remaining <= 0:
+        print(
+            f"Daily crawl limit of {args.limit} reached ({state['count']} records already crawled today). "
+            f"Limit resets at midnight UTC.",
+            file=sys.stderr,
+        )
+        # Still write an empty output file so downstream scripts don't break
+        if args.out:
+            output_file = args.out
+        else:
+            output_file = "leads.csv" if args.format == "csv" else "leads.json"
+        if args.format == "csv":
+            write_csv([], output_file)
+        else:
+            write_json([], output_file)
+        print(f"0 record(s) written to {output_file}", file=sys.stderr)
+        return
+
+    # Crawl URLs, respecting the daily limit
     records = []
+    crawled_this_run = 0
+
     for url in args.urls:
+        if crawled_this_run >= remaining:
+            print(
+                f"Daily limit reached ({state['count'] + crawled_this_run}/{args.limit}). "
+                f"Stopping. Remaining URLs skipped.",
+                file=sys.stderr,
+            )
+            break
+
         record = crawl_url(url)
         records.append(record)
+        crawled_this_run += 1
         status = record["status"]
         print(f"[{status}] {url}", file=sys.stderr)
+
+    # Update and save daily state
+    state["count"] = state["count"] + crawled_this_run
+    save_crawl_state(state)
 
     # Determine output file
     if args.out:
@@ -310,7 +406,11 @@ def main():
     else:
         write_json(records, output_file)
 
-    print(f"\n{len(records)} record(s) written to {output_file}", file=sys.stderr)
+    print(
+        f"{len(records)} record(s) written to {output_file} "
+        f"({state['count']}/{args.limit} used today)",
+        file=sys.stderr,
+    )
     print(
         "CRM import tip: Import the CSV into HubSpot, Salesforce, Pipedrive, or Zoho.",
         file=sys.stderr,

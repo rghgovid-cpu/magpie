@@ -42,10 +42,23 @@ magpie run "crawl https://example.com --format csv --out leads.csv"
 magpie run "crawl https://site1.com https://site2.com --format csv --out leads.csv"
 ```
 
+### Crawl with a daily record limit override
+```bash
+magpie run "crawl https://example.com --format csv --out leads.csv --limit 50"
+```
+
 ### Crawl to JSON (for API integration)
 ```bash
 magpie run "crawl https://example.com --format json --out leads.json"
 ```
+
+## Daily Crawl Limit
+
+To protect against excessive crawling, Magpie enforces a **daily limit of 200 records** by default. The count is stored locally in `~/.config/magpie/crawl_state.json` and resets at **midnight local time**.
+
+- The limit is checked before each URL is crawled. Once reached, remaining URLs are skipped.
+- Use `--limit N` to override for a single run (e.g. `--limit 50`).
+- Delete `~/.config/magpie/crawl_state.json` to reset the counter manually.
 
 ## CRM Import Instructions
 

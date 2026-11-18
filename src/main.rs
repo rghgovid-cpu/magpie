@@ -86,6 +86,11 @@ enum Commands {
         #[arg(short = 'i', long = "interactive")]
         interactive: bool,
     },
+    /// Run a marketing campaign: research, crawl, analyze, export to CRM.
+    Campaign {
+        #[command(subcommand)]
+        command: commands::campaign::CampaignCommand,
+    },
 }
 
 #[tokio::main]
@@ -235,6 +240,9 @@ async fn run(cli: Cli) -> Result<()> {
                 model,
                 interactive,
             })?;
+        }
+        Commands::Campaign { command } => {
+            commands::campaign::handle(command)?;
         }
     }
     Ok(())

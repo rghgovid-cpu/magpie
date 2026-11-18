@@ -1,19 +1,27 @@
 #!/usr/bin/env python3
 """
 magpie-search.py — Web search for Magpie skill system.
-Searches DuckDuckGo HTML and returns structured results (CSV/JSON).
+Searches DuckDuckGo HTML (free, no API key) or Serper.dev (Google Search API)
+and returns structured results (CSV/JSON).
 
 Usage:
-    python3 magpie-search.py <query> [--format csv|json] [--out <file>] [--limit <n>]
+    python3 magpie-search.py <query> [--format csv|json] [--out <file>] [--limit <n>] [--engine duckduckgo|serper]
+
+Environment:
+    SERPER_API_KEY   API key for Serper.dev (required when --engine serper).
+                     Get one at https://serper.dev
 """
 
 import sys
 import re
+import os
 import csv
 import json
 import argparse
+import urllib.request
+import urllib.error
 from datetime import datetime, timezone
-from urllib.parse import urljoin, urlparse, quote_plus
+from urllib.parse import parse_qs, quote_plus, urlsplit
 from html import unescape
 
 try:
@@ -45,7 +53,6 @@ def search_duckduckgo(query, limit=10):
         # Fallback using urllib (standard library)
         try:
             import urllib.request
-            import urllib.parse
             url = "https://html.duckduckgo.com/html/?q=" + quote_plus(query)
             req = urllib.request.Request(
                 url,
@@ -54,6 +61,7 @@ def search_duckduckgo(query, limit=10):
                                   "AppleWebKit/537.36 (KHTML, like Gecko) "
                                   "Chrome/120.0.0.0 Safari/537.36"
 
+                }
             )
             with urllib.request.urlopen(req, timeout=20) as resp:
                 html = resp.read().decode("utf-8", errors="replace")
@@ -83,7 +91,6 @@ def search_duckduckgo(query, limit=10):
 
             # DuckDuckGo uses redirect URLs; extract the actual URL from uddg param
             if url and "uddg=" in url:
-                from urllib.parse import parse_qs, urlsplit
                 parsed = urlsplit(url)
                 qs = parse_qs(parsed.query)
                 if "uddg" in qs:
@@ -108,6 +115,52 @@ def search_duckduckgo(query, limit=10):
     return results
 
 
+def search_serper(query, limit=10, api_key=None):
+    """Search using Serper.dev Google Search API and return structured results."""
+    if not api_key:
+        api_key = os.environ.get("SERPER_API_KEY", "")
+    if not api_key:
+        print(
+            "Error: SERPER_API_KEY is not set. Export it (e.g. export SERPER_API_KEY=...) "
+            "or run 'magpie config serper-setup', then retry. Or use --engine duckduckgo.",
+            file=sys.stderr,
+        )
+        return []
+
+    try:
+        url = "https://google.serper.dev/search"
+        body = {
+            "q": query,
+            "num": min(max(limit, 1), 10),
+        }
+        data = json.dumps(body).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers={
+                "X-API-KEY": api_key,
+                "Content-Type": "application/json",
+                "User-Agent": "Magpie/1.0",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            payload = json.loads(resp.read().decode("utf-8", errors="replace"))
+    except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError, OSError) as e:
+        print(f"Error searching Serper: {e}", file=sys.stderr)
+        return []
+
+    results = []
+    for item in payload.get("organic", [])[:limit]:
+        results.append({
+            "title": item.get("title", ""),
+            "url": item.get("link", ""),
+            "snippet": item.get("snippet", ""),
+        })
+
+    return results
+
+
 def clean_text(text):
     """Clean and normalize text."""
     if not text:
@@ -117,7 +170,7 @@ def clean_text(text):
     return text.strip()
 
 
-def write_csv(records, query, output_file):
+def write_csv(records, query, output_file, source):
     """Write search results to CSV file."""
     fieldnames = ["query", "rank", "title", "url", "snippet", "source"]
     with open(output_file, "w", newline="", encoding="utf-8") as f:
@@ -130,15 +183,15 @@ def write_csv(records, query, output_file):
                 "title": record.get("title", ""),
                 "url": record.get("url", ""),
                 "snippet": record.get("snippet", ""),
-                "source": "duckduckgo",
+                "source": source,
             })
 
 
-def write_json(records, query, output_file):
+def write_json(records, query, output_file, source):
     """Write search results to JSON file."""
     output = {
         "query": query,
-        "source": "duckduckgo",
+        "source": source,
         "search_date": datetime.now(timezone.utc).isoformat(),
         "total": len(records),
         "results": [
@@ -157,7 +210,7 @@ def write_json(records, query, output_file):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Magpie Web Search — search DuckDuckGo and export results"
+        description="Magpie Web Search — search the web and export results"
     )
     parser.add_argument("query", help="Search query")
     parser.add_argument(
@@ -177,12 +230,24 @@ def main():
         default=10,
         help="Maximum number of results (default: 10)",
     )
+    parser.add_argument(
+        "--engine",
+        choices=["duckduckgo", "serper"],
+        default="duckduckgo",
+        help="Search engine to use (default: duckduckgo). 'serper' requires SERPER_API_KEY.",
+    )
     args = parser.parse_args()
 
     # Perform search
-    results = search_duckduckgo(args.query, limit=args.limit)
+    if args.engine == "serper":
+        results = search_serper(args.query, limit=args.limit)
+        source = "serper"
+    else:
+        results = search_duckduckgo(args.query, limit=args.limit)
+        source = "duckduckgo"
 
-    print(f"Found {len(results)} result(s) for: {args.query}", file=sys.stderr)
+    print(f"Found {len(results)} result(s) for: {args.query} (engine: {source})",
+          file=sys.stderr)
 
     # Determine output file
     if args.out:
@@ -192,9 +257,9 @@ def main():
 
     # Write output
     if args.format == "csv":
-        write_csv(results, args.query, output_file)
+        write_csv(results, args.query, output_file, source)
     else:
-        write_json(results, args.query, output_file)
+        write_json(results, args.query, output_file, source)
 
     print(f"Results written to {output_file}", file=sys.stderr)
 

@@ -15,13 +15,21 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::result::Result as StdResult;
 
-/// Resolve the base directory: prefer MAGPIE_HOME env var, else current dir.
+/// Resolve the base directory: prefer MAGPIE_HOME env var, then binary dir, then current dir.
 fn magpie_base_dir() -> PathBuf {
     if let Ok(dir) = std::env::var("MAGPIE_HOME") {
-        PathBuf::from(dir)
-    } else {
-        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+        return PathBuf::from(dir);
     }
+    // Try binary location first
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(parent) = exe_path.parent() {
+            if parent.join("knowledge").exists() || parent.join("skills").exists() {
+                return parent.to_path_buf();
+            }
+        }
+    }
+    // Fall back to current dir
+    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
 
 /// Shared application state for the web server.
@@ -155,9 +163,24 @@ async fn company_setup_handler(
 
     // Save company name to knowledge/company-name.txt
     let knowledge_dir = magpie_base_dir().join("knowledge");
+    eprintln!("[DEBUG] Knowledge dir: {:?}", knowledge_dir);
     if !knowledge_dir.exists() {
         std::fs::create_dir_all(&knowledge_dir)
             .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+
+    // CLEAR existing knowledge directory - website URL is the primary key
+    // Remove all files in knowledge/ so only this company's data exists
+    if knowledge_dir.exists() {
+        for entry in std::fs::read_dir(&knowledge_dir)
+            .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?
+        {
+            let entry = entry.map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let path = entry.path();
+            if path.is_file() {
+                std::fs::remove_file(&path).map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
+            }
+        }
     }
 
     let company_file = knowledge_dir.join("company-name.txt");

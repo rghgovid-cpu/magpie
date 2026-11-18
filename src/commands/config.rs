@@ -6,6 +6,7 @@ use crate::error::Result;
 use clap::Args;
 use clap::Subcommand;
 use inquire::Confirm;
+use inquire::Password;
 use inquire::Select;
 use inquire::Text;
 
@@ -22,6 +23,10 @@ pub enum ConfigCommand {
     LLMSetup,
     /// Show current LLM provider configuration
     LLMShow,
+    /// Configure the Serper.dev API key used by Web Search (--engine serper)
+    SerperSetup,
+    /// Show whether a Serper API key is configured
+    SerperShow,
 }
 
 #[derive(Args, Debug)]
@@ -148,6 +153,33 @@ pub fn handle(cmd: ConfigCommand) -> Result<()> {
                 println!("  API Key:   <not set>");
             }
             println!();
+        }
+        ConfigCommand::SerperSetup => {
+            let api_key = Password::new("Enter Serper.dev API key:")
+                .with_help_message("Get one at https://serper.dev")
+                .prompt()?;
+            match api_key {
+                key if key.is_empty() => {
+                    crate::config::clear_serper_api_key()?;
+                    println!("✅ Serper API key cleared.");
+                }
+                key => {
+                    crate::config::set_serper_api_key(&key)?;
+                    println!("✅ Serper API key saved to ~/.config/magpie/config.toml");
+                    println!("   Export it before searching: export SERPER_API_KEY=\"<your-key>\"");
+                }
+            }
+        }
+        ConfigCommand::SerperShow => {
+            match crate::config::serper_api_key()? {
+                Some(_) => {
+                    println!("\n🔧 Serper.dev API Key: ***set***\n");
+                }
+                None => {
+                    println!("\n🔧 Serper.dev API Key: <not set>\n");
+                    println!("Set one: magpie config serper-setup");
+                }
+            }
         }
     }
     Ok(())

@@ -30,6 +30,18 @@ def ensure_knowledge_dir():
     KNOWLEDGE_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def clear_knowledge_dir():
+    """Clear all files in knowledge/ - website URL is the primary key."""
+    if KNOWLEDGE_DIR.exists():
+        for entry in KNOWLEDGE_DIR.iterdir():
+            if entry.is_file():
+                entry.unlink()
+            elif entry.is_dir():
+                import shutil
+                shutil.rmtree(entry)
+    print(f"🗑️  Cleared existing knowledge directory: {KNOWLEDGE_DIR}")
+
+
 def copy_pdf_to_knowledge(pdf_path):
     """Copy a PDF file into the knowledge directory."""
     src = Path(pdf_path)
@@ -142,6 +154,7 @@ def main():
         sys.exit(1)
 
     ensure_knowledge_dir()
+    clear_knowledge_dir()
 
     api_key = os.environ.get("MAGPIE_API_KEY") or os.environ.get("OPENAI_API_KEY")
     base_url = os.environ.get("MAGPIE_BASE_URL", "https://api.openai.com/v1")

@@ -17,6 +17,10 @@ pub struct MagpieConfig {
     pub default_format: PrintFormat,
     pub auto_install: bool,
     pub llm_provider: LLMProviderConfig,
+    /// Serper.dev API key used by the Web Search skill (--engine serper).
+    pub serper_api_key: Option<String>,
+    /// Name of the currently active campaign.
+    pub active_campaign: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -110,6 +114,95 @@ pub fn save_magpie_config(config: &MagpieConfig) -> Result<()> {
     let contents = toml::to_string_pretty(config)?;
     fs::write(&path, contents)?;
     Ok(())
+}
+
+/// Return the configured Serper API key, if any.
+pub fn serper_api_key() -> Result<Option<String>> {
+    Ok(load_magpie_config()?.serper_api_key)
+}
+
+/// Store the Serper API key in Magpie config.
+pub fn set_serper_api_key(key: &str) -> Result<()> {
+    let mut config = load_magpie_config()?;
+    config.serper_api_key = Some(key.to_string());
+    save_magpie_config(&config)
+}
+
+/// Remove the stored Serper API key from Magpie config.
+pub fn clear_serper_api_key() -> Result<()> {
+    let mut config = load_magpie_config()?;
+    config.serper_api_key = None;
+    save_magpie_config(&config)
+}
+
+/// Return the directory for campaign data.
+pub fn campaigns_dir() -> Result<PathBuf> {
+    let dir = magpie_config_dir()?.join("campaigns");
+    fs::create_dir_all(&dir)?;
+    Ok(dir)
+}
+
+/// Return the path to a specific campaign directory.
+pub fn campaign_path(name: &str) -> Result<PathBuf> {
+    Ok(campaigns_dir()?.join(name))
+}
+
+/// Return the path to a campaign's campaign.json manifest.
+pub fn campaign_manifest_path(name: &str) -> Result<PathBuf> {
+    Ok(campaign_path(name)?.join("campaign.json"))
+}
+
+/// Return the path to a campaign's leads.json file.
+pub fn campaign_leads_path(name: &str) -> Result<PathBuf> {
+    Ok(campaign_path(name)?.join("leads.json"))
+}
+
+/// Return the path to a campaign's CRM export file.
+pub fn campaign_crm_path(name: &str) -> Result<PathBuf> {
+    Ok(campaign_path(name)?.join("crm-export.json"))
+}
+
+/// List all campaign directories.
+pub fn list_campaigns() -> Result<Vec<String>> {
+    let dir = campaigns_dir()?;
+    let mut campaigns = Vec::new();
+    if dir.exists() {
+        for entry in fs::read_dir(&dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    campaigns.push(name.to_string());
+                }
+            }
+        }
+    }
+    campaigns.sort();
+    Ok(campaigns)
+}
+
+/// Check if a campaign exists.
+pub fn campaign_exists(name: &str) -> Result<bool> {
+    Ok(campaign_path(name)?.exists())
+}
+
+/// Read the active campaign name from config, if any.
+pub fn active_campaign() -> Result<Option<String>> {
+    Ok(load_magpie_config()?.active_campaign)
+}
+
+/// Set the active campaign name in config.
+pub fn set_active_campaign(name: &str) -> Result<()> {
+    let mut config = load_magpie_config()?;
+    config.active_campaign = Some(name.to_string());
+    save_magpie_config(&config)
+}
+
+/// Clear the active campaign from config.
+pub fn clear_active_campaign() -> Result<()> {
+    let mut config = load_magpie_config()?;
+    config.active_campaign = None;
+    save_magpie_config(&config)
 }
 
 /// Read OpenCode's opencode.jsonc (tolerant to comments) and extract skill sources.

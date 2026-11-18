@@ -12,7 +12,7 @@ clap = { version = "4", features = ["derive"] }
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 # HTTP client for skill.sh API
-reqwest = { version = "0.12", features = ["json", "stream"] }
+reqwest = { version = "0.12", features = ["json", "stream", "blocking"] }
 # URL encoding for skill.sh queries
 urlencoding = "2.1"
 # Async stream utilities for LLM streaming

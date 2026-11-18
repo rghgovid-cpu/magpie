@@ -1,4 +1,5 @@
 pub mod config;
+pub mod campaign;
 pub mod models;
 pub mod print;
 pub mod run;

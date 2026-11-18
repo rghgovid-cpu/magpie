@@ -11,13 +11,21 @@ pub const MARKETING_CONTEXT: &str = "You are Magpie, a marketing-focused AI assi
 Help the user with marketing tasks: copywriting, campaign planning, SEO, ads, email,\nsocial media, landing pages, brand voice, and go-to-market messaging.\n\
 Prefer clear, persuasive, conversion-oriented output. When relevant, use installed\nmarketing skills to ground your work.";
 
-/// Resolve the base directory: check MAGPIE_HOME, then current dir, then parent dirs.
+/// Resolve the base directory: prefer MAGPIE_HOME, then binary dir, then current dir.
 fn magpie_base_dir() -> PathBuf {
     if let Ok(dir) = std::env::var("MAGPIE_HOME") {
         return PathBuf::from(dir);
     }
+    // Try binary location first
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(parent) = exe_path.parent() {
+            if parent.join("knowledge").is_dir() {
+                return parent.to_path_buf();
+            }
+        }
+    }
+    // Check current dir and parents for knowledge/
     if let Ok(cwd) = std::env::current_dir() {
-        // Check if knowledge/ exists in current dir or any parent
         let mut dir = cwd.clone();
         loop {
             if dir.join("knowledge").is_dir() {

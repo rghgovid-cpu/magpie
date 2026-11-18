@@ -185,8 +185,8 @@ pub fn builtin_skills() -> Vec<BuiltinSkill> {
         BuiltinSkill {
             id: "web-search".to_string(),
             name: "Web Search".to_string(),
-            description: "Search the web and return structured results (title, URL, snippet) that can be fed into the crawler skill for CRM extraction.".to_string(),
-            tags: vec!["search".into(), "web".into(), "google".into(), "duckduckgo".into(), "query".into(), "results".into()],
+            description: "Search the web via DuckDuckGo (free, no key) or Serper.dev (Google Search API, requires SERPER_API_KEY) and return structured results (title, URL, snippet) for CRM extraction.".to_string(),
+            tags: vec!["search".into(), "web".into(), "google".into(), "duckduckgo".into(), "serper".into(), "query".into(), "results".into()],
         },
         BuiltinSkill {
             id: "brand-analysis".to_string(),

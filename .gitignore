@@ -32,3 +32,18 @@ knowledge/brand-voice.md
 knowledge/brand-analysis.md
 knowledge/crawled-pages.json
 knowledge/.rag-index.json
+.aider*
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Magpie output files (generated locally)
+*.csv
+*.json
+magpie_bundle.txt
+*.tmp
+
+# Local generated data
+leads.csv
+search.csv
