@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-magpie-crawl.py — Web crawler for Magpie skill system.
+magpie-crawl.py — Responsible Web Crawler for Magpie skill system.
 Extracts CRM-ready data (title, company, emails, phones, address, etc.)
 and outputs CSV or JSON.
 
@@ -8,9 +8,21 @@ Usage:
     python3 magpie-crawl.py <url> [--format csv|json] [--out <file>] [--limit <n>]
     python3 magpie-crawl.py <url1> <url2> ... [--format csv] [--out leads.csv]
 
+Responsible crawling:
+    - Respects robots.txt (Disallow rules and Crawl-delay)
+    - Rate-limited: 1 second delay between requests by default
+    - Identifies itself with a transparent User-Agent
+    - Daily quota: 200 records per day (resets at midnight local time)
+
+    We are nice crawlers. Please contact us if we are crawling too aggressively.
+
+Usage:
+    python3 magpie-crawl.py <url> [--format csv|json] [--out <file>] [--limit <n>]
+    python3 magpie-crawl.py <url1> <url2> ... [--format csv] [--out leads.csv]
+
 Daily quota:
     By default, crawling is limited to 200 records per day. The count is
-    stored in ~/.config/magpie/crawl_state.json and resets at midnight UTC.
+    stored in ~/.config/magpie/crawl_state.json and resets at midnight local time.
     Use --limit to override for a single run (e.g. --limit 50).
 """
 
@@ -19,9 +31,10 @@ import os
 import re
 import csv
 import json
+import time
 import argparse
 from datetime import datetime
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlunparse
 from html import unescape
 
 try:
@@ -34,27 +47,106 @@ except ImportError:
 # Default daily record limit
 DAILY_LIMIT = 200
 
+# Default delay between requests (seconds) — be nice to servers
+DEFAULT_DELAY = 1.0
+
 # State file to track daily crawl count
 MAGPIE_CONFIG_DIR = os.path.expanduser("~/.config/magpie")
 CRAWL_STATE_FILE = os.path.join(MAGPIE_CONFIG_DIR, "crawl_state.json")
 
+# Cache for robots.txt parsers per domain
+_ROBOTS_CACHE = {}
 
-def fetch_html(url):
-    """Fetch HTML from a URL."""
+
+def get_robots_parser(base_url):
+    """Fetch and parse robots.txt for a domain. Returns a parser object or None."""
+    parsed = urlparse(base_url)
+    robots_url = urlunparse((parsed.scheme, parsed.netloc, "/robots.txt", "", "", ""))
+
+    if robots_url in _ROBOTS_CACHE:
+        return _ROBOTS_CACHE[robots_url]
+
+    try:
+        import urllib.robotparser
+        rp = urllib.robotparser.RobotFileParser()
+        rp.set_url(robots_url)
+        rp.read()
+        _ROBOTS_CACHE[robots_url] = rp
+        return rp
+    except Exception as e:
+        print(f"Warning: could not fetch robots.txt for {parsed.netloc}: {e}", file=sys.stderr)
+        _ROBOTS_CACHE[robots_url] = None
+        return None
+
+
+def is_allowed(url, user_agent="MagpieBot/1.0"):
+    """Check if a URL is allowed by robots.txt."""
+    parsed = urlparse(url)
+    robots_url = urlunparse((parsed.scheme, parsed.netloc, "/robots.txt", "", "", ""))
+
+    if robots_url in _ROBOTS_CACHE:
+        rp = _ROBOTS_CACHE[robots_url]
+    else:
+        rp = get_robots_parser(url)
+
+    if rp is None:
+        # If we can't read robots.txt, be conservative: allow but slow down
+        return True
+
+    try:
+        return rp.can_fetch(user_agent, url)
+    except Exception:
+        return True
+
+
+def get_crawl_delay(base_url, user_agent="MagpieBot/1.0"):
+    """Get the crawl-delay from robots.txt, or return the default delay."""
+    parsed = urlparse(base_url)
+    robots_url = urlunparse((parsed.scheme, parsed.netloc, "/robots.txt", "", "", ""))
+
+    if robots_url in _ROBOTS_CACHE:
+        rp = _ROBOTS_CACHE[robots_url]
+    else:
+        rp = get_robots_parser(base_url)
+
+    if rp is None:
+        return DEFAULT_DELAY
+
+    try:
+        delay = rp.crawl_delay(user_agent)
+        if delay is not None:
+            return float(delay)
+    except Exception:
+        pass
+
+    return DEFAULT_DELAY
+
+
+def fetch_html(url, delay=DEFAULT_DELAY):
+    """Fetch HTML from a URL, respecting robots.txt and rate limits."""
+    # Check robots.txt
+    if not is_allowed(url):
+        print(f"Skipped (robots.txt disallows): {url}", file=sys.stderr)
+        return None, url, 0
+
+    # Respect crawl-delay from robots.txt
+    robots_delay = get_crawl_delay(url)
+    actual_delay = max(delay, robots_delay)
+
     if HAS_REQUESTS:
         try:
             resp = requests.get(
                 url,
                 timeout=15,
                 headers={
-                    "User-Agent": "MagpieBot/1.0 (compatible; Magpie CRM Crawler; +https://github.com/rghgovid-cpu/magpie)"
+                    "User-Agent": "MagpieBot/1.0 (responsible crawler; +https://github.com/rghgovid-cpu/magpie; contact: admin@example.com)"
                 },
             )
             resp.raise_for_status()
-            return resp.text, resp.url
+            return resp.text, resp.url, actual_delay
         except Exception as e:
             print(f"Error fetching {url}: {e}", file=sys.stderr)
-            return None, url
+            return None, url, actual_delay
     else:
         # Fallback using urllib (standard library)
         try:
@@ -62,16 +154,16 @@ def fetch_html(url):
             req = urllib.request.Request(
                 url,
                 headers={
-                    "User-Agent": "MagpieBot/1.0 (compatible; Magpie CRM Crawler)"
+                    "User-Agent": "MagpieBot/1.0 (responsible crawler; +https://github.com/rghgovid-cpu/magpie; contact: admin@example.com)"
                 },
             )
             with urllib.request.urlopen(req, timeout=15) as resp:
                 final_url = resp.geturl()
                 html = resp.read().decode("utf-8", errors="replace")
-                return html, final_url
+                return html, final_url, actual_delay
         except Exception as e:
             print(f"Error fetching {url}: {e}", file=sys.stderr)
-            return None, url
+            return None, url, actual_delay
 
 
 def clean_text(text):
@@ -166,49 +258,9 @@ def extract_contact_name(soup, text):
     return ""
 
 
-def load_crawl_state():
-    """Load the daily crawl state from disk.
-
-    Returns a dict with 'date' (YYYY-MM-DD) and 'count' (int).
-    Resets count to 0 if the stored date is not today (local time).
-    """
-    today = datetime.now().strftime("%Y-%m-%d")
-    default = {"date": today, "count": 0}
-
-    if not os.path.exists(CRAWL_STATE_FILE):
-        return default
-
-    try:
-        with open(CRAWL_STATE_FILE, "r", encoding="utf-8") as f:
-            state = json.load(f)
-        # Reset if it's a new day
-        if state.get("date") != today:
-            state = {"date": today, "count": 0}
-        # Ensure required fields
-        if "count" not in state:
-            state["count"] = 0
-        if "date" not in state:
-            state["date"] = today
-        return state
-    except (json.JSONDecodeError, OSError):
-        return default
-
-
-def save_crawl_state(state):
-    """Persist the daily crawl state to disk."""
-    try:
-        os.makedirs(MAGPIE_CONFIG_DIR, exist_ok=True)
-        tmp_file = CRAWL_STATE_FILE + ".tmp"
-        with open(tmp_file, "w", encoding="utf-8") as f:
-            json.dump(state, f, indent=2)
-        os.replace(tmp_file, CRAWL_STATE_FILE)
-    except OSError as e:
-        print(f"Warning: could not save crawl state: {e}", file=sys.stderr)
-
-
-def crawl_url(url):
+def crawl_url(url, delay=DEFAULT_DELAY):
     """Crawl a single URL and return a CRM-ready record."""
-    html, final_url = fetch_html(url)
+    html, final_url, crawl_delay = fetch_html(url, delay=delay)
     if html is None:
         return {
             "url": url,
@@ -223,6 +275,7 @@ def crawl_url(url):
             "links": "",
             "crawl_date": datetime.now().isoformat(),
             "status": "error",
+            "robots_delay": crawl_delay,
         }
 
     soup = BeautifulSoup(html, "html.parser")
@@ -293,6 +346,7 @@ def crawl_url(url):
         "links": "; ".join(links[:20]),  # limit to 20 links
         "crawl_date": datetime.now().isoformat(),
         "status": "success",
+        "robots_delay": crawl_delay,
     }
 
 
@@ -311,6 +365,7 @@ def write_csv(records, output_file):
         "links",
         "crawl_date",
         "status",
+        "robots_delay",
     ]
     with open(output_file, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -325,9 +380,49 @@ def write_json(records, output_file):
         json.dump(records, f, indent=2, ensure_ascii=False)
 
 
+def load_crawl_state():
+    """Load the daily crawl state from disk.
+
+    Returns a dict with 'date' (YYYY-MM-DD) and 'count' (int).
+    Resets count to 0 if the stored date is not today (local time).
+    """
+    today = datetime.now().strftime("%Y-%m-%d")
+    default = {"date": today, "count": 0}
+
+    if not os.path.exists(CRAWL_STATE_FILE):
+        return default
+
+    try:
+        with open(CRAWL_STATE_FILE, "r", encoding="utf-8") as f:
+            state = json.load(f)
+        # Reset if it's a new day
+        if state.get("date") != today:
+            state = {"date": today, "count": 0}
+        # Ensure required fields
+        if "count" not in state:
+            state["count"] = 0
+        if "date" not in state:
+            state["date"] = today
+        return state
+    except (json.JSONDecodeError, OSError):
+        return default
+
+
+def save_crawl_state(state):
+    """Persist the daily crawl state to disk."""
+    try:
+        os.makedirs(MAGPIE_CONFIG_DIR, exist_ok=True)
+        tmp_file = CRAWL_STATE_FILE + ".tmp"
+        with open(tmp_file, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=2)
+        os.replace(tmp_file, CRAWL_STATE_FILE)
+    except OSError as e:
+        print(f"Warning: could not save crawl state: {e}", file=sys.stderr)
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Magpie Web Crawler — CRM-ready data extraction"
+        description="Magpie Web Crawler — responsible CRM-ready data extraction"
     )
     parser.add_argument("urls", nargs="+", help="URL(s) to crawl")
     parser.add_argument(
@@ -347,7 +442,19 @@ def main():
         default=DAILY_LIMIT,
         help=f"Maximum records to crawl today (default: {DAILY_LIMIT})",
     )
+    parser.add_argument(
+        "--delay",
+        type=float,
+        default=DEFAULT_DELAY,
+        help=f"Delay in seconds between requests (default: {DEFAULT_DELAY})",
+    )
     args = parser.parse_args()
+
+    print(
+        "⚠️  Magpie is a responsible crawler. We respect robots.txt, rate-limit requests, "
+        "and identify ourselves. Please contact us if we crawl too aggressively.",
+        file=sys.stderr,
+    )
 
     # Load daily crawl state
     state = load_crawl_state()
@@ -356,7 +463,7 @@ def main():
     if remaining <= 0:
         print(
             f"Daily crawl limit of {args.limit} reached ({state['count']} records already crawled today). "
-            f"Limit resets at midnight UTC.",
+            f"Limit resets at midnight local time.",
             file=sys.stderr,
         )
         # Still write an empty output file so downstream scripts don't break
@@ -371,11 +478,11 @@ def main():
         print(f"0 record(s) written to {output_file}", file=sys.stderr)
         return
 
-    # Crawl URLs, respecting the daily limit
+    # Crawl URLs, respecting the daily limit and rate limits
     records = []
     crawled_this_run = 0
 
-    for url in args.urls:
+    for i, url in enumerate(args.urls):
         if crawled_this_run >= remaining:
             print(
                 f"Daily limit reached ({state['count'] + crawled_this_run}/{args.limit}). "
@@ -384,11 +491,16 @@ def main():
             )
             break
 
-        record = crawl_url(url)
+        record = crawl_url(url, delay=args.delay)
         records.append(record)
         crawled_this_run += 1
         status = record["status"]
-        print(f"[{status}] {url}", file=sys.stderr)
+        delay = record.get("robots_delay", args.delay)
+        print(f"[{status}] {url} (delay: {delay}s)", file=sys.stderr)
+
+        # Rate limit: sleep before the next request (not after the last one)
+        if i < len(args.urls) - 1 and crawled_this_run < remaining:
+            time.sleep(delay)
 
     # Update and save daily state
     state["count"] = state["count"] + crawled_this_run

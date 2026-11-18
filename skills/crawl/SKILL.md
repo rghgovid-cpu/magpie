@@ -30,6 +30,15 @@ Use this skill to crawl websites and export structured data that is ready for CR
 | `links` | All outbound links |
 | `crawl_date` | ISO 8601 timestamp |
 
+## Responsible Crawling
+
+We are nice crawlers. Magpie is designed to be respectful to the websites it visits:
+
+- **Respects `robots.txt`**: Checks `Disallow` rules and `Crawl-delay` directives before fetching any page. If a site disallows crawling, Magpie skips it.
+- **Rate-limited**: Adds a delay between requests (default: 1 second, or the `Crawl-delay` from `robots.txt` if specified). Use `--delay N` to override.
+- **Transparent identity**: Identifies itself with a clear `User-Agent` string including a contact URL.
+- **Daily quota**: Limited to 200 records per day by default to prevent accidental overload.
+
 ## Commands
 
 ### Crawl a single URL to CSV (CRM-ready)
@@ -45,6 +54,11 @@ magpie run "crawl https://site1.com https://site2.com --format csv --out leads.c
 ### Crawl with a daily record limit override
 ```bash
 magpie run "crawl https://example.com --format csv --out leads.csv --limit 50"
+```
+
+### Crawl with a custom delay between requests
+```bash
+magpie run "crawl https://site1.com https://site2.com --delay 2.0"
 ```
 
 ### Crawl to JSON (for API integration)
@@ -86,8 +100,10 @@ https://example.com,Example Corp,Example Corp,"A leading marketing agency",info@
 
 ## Notes
 
-- Respects `robots.txt` where possible
-- Rate-limited to 1 request per second per domain
+- Respects `robots.txt` (Disallow rules and Crawl-delay directives)
+- Rate-limited: 1 second delay between requests by default (use `--delay N` to override)
+- Identifies itself with a transparent User-Agent including contact info
+- Daily quota: 200 records per day (resets at midnight local time)
 - Extracts mailto: and tel: links automatically
 - Cleans HTML tags from text fields
 - Truncates long descriptions to 500 characters for CRM compatibility
