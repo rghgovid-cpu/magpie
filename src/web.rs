@@ -303,9 +303,9 @@ pub async fn start_web_server() -> Result<()> {
         // Return a client that will produce a helpful error when used.
         LLMClient {
             client: reqwest::Client::new(),
-            base_url: "https://api.openai.com/v1".to_string(),
+            base_url: "https://integrate.api.nvidia.com/v1".to_string(),
             api_key: String::new(),
-            model: "gpt-4o-mini".to_string(),
+            model: "nemotron-3.5-super-vl-free".to_string(),
             temperature: 0.7,
         }
     });

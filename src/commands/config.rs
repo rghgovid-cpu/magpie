@@ -78,6 +78,7 @@ pub fn handle(cmd: ConfigCommand) -> Result<()> {
             let mut config = load_magpie_config()?;
 
             let providers = [
+                "NVIDIA NIM (https://integrate.api.nvidia.com/v1)",
                 "OpenAI (https://api.openai.com/v1)",
                 "OpenRouter (https://openrouter.ai/api/v1)",
                 "Ollama (http://localhost:11434/v1)",
@@ -87,6 +88,9 @@ pub fn handle(cmd: ConfigCommand) -> Result<()> {
             let choice = Select::new("Select LLM provider:", providers.to_vec()).prompt()?;
 
             let base_url = match choice {
+                "NVIDIA NIM (https://integrate.api.nvidia.com/v1)" => {
+                    "https://integrate.api.nvidia.com/v1".to_string()
+                }
                 "OpenAI (https://api.openai.com/v1)" => "https://api.openai.com/v1".to_string(),
                 "OpenRouter (https://openrouter.ai/api/v1)" => {
                     "https://openrouter.ai/api/v1".to_string()
@@ -100,7 +104,7 @@ pub fn handle(cmd: ConfigCommand) -> Result<()> {
                 "Custom" => {
                     Text::new("Enter custom base URL:").prompt()?
                 }
-                _ => "https://api.openai.com/v1".to_string(),
+                _ => "https://integrate.api.nvidia.com/v1".to_string(),
             };
 
             let api_key = if choice.starts_with("Ollama") || choice.starts_with("LM Studio") {

@@ -86,7 +86,7 @@ impl LLMClient {
         let base_url = llm
             .base_url
             .as_deref()
-            .unwrap_or("https://api.openai.com/v1")
+            .unwrap_or("https://integrate.api.nvidia.com/v1")
             .trim_end_matches('/')
             .to_string();
 
@@ -94,10 +94,11 @@ impl LLMClient {
             .api_key
             .clone()
             .or_else(|| env::var("MAGPIE_API_KEY").ok())
+            .or_else(|| env::var("NVIDIA_API_KEY").ok())
             .or_else(|| env::var("OPENAI_API_KEY").ok())
             .ok_or_else(|| {
                 MagpieError::Custom(
-                    "No LLM API key configured. Set MAGPIE_API_KEY or OPENAI_API_KEY env var, or run `magpie config llm-setup`."
+                    "No LLM API key configured. Set NVIDIA_API_KEY or MAGPIE_API_KEY env var, or run `magpie config llm-setup`."
                         .to_string(),
                 )
             })?;
@@ -105,7 +106,7 @@ impl LLMClient {
         let model = llm
             .model
             .clone()
-            .unwrap_or_else(|| "gpt-4o-mini".to_string());
+            .unwrap_or_else(|| "nemotron-3.5-super-vl-free".to_string());
 
         let temperature = llm.temperature.unwrap_or(0.7);
 
@@ -228,9 +229,9 @@ impl Default for LLMClient {
         // This is only used as a placeholder; prefer from_config().
         Self {
             client: Client::new(),
-            base_url: "https://api.openai.com/v1".to_string(),
+            base_url: "https://integrate.api.nvidia.com/v1".to_string(),
             api_key: String::new(),
-            model: "gpt-4o-mini".to_string(),
+            model: "nemotron-3.5-super-vl-free".to_string(),
             temperature: 0.7,
         }
     }

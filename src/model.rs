@@ -10,17 +10,22 @@ pub struct Model {
 /// List available models (placeholder - in a full build this queries providers).
 pub fn list_models(provider: Option<&str>) -> Result<Vec<Model>> {
     let models = vec![
-        ("opencode/nemotron-3.5-super-vl-free", "opencode"),
-        ("opencode/nemotron-3.5-lightning-free", "opencode"),
-        ("opencode/deepseek-v4.1-flash-free", "opencode"),
-        ("opencode/longcat-2.5-free", "opencode"),
-        ("opencode/minimax-m3.1-flash-free", "opencode"),
-        ("opencode/glm-5.3-flash-free", "opencode"),
-        ("opencode/inkling-2-small-free", "opencode"),
-        ("opencode/flint-40b-free", "opencode"),
-        ("opencode/big-pickle", "opencode"),
-        ("opencode/beam-free", "opencode"),
-        ("opencode/iceman-free", "opencode"),
+        // NVIDIA NIM (default)
+        ("nvidia/nemotron-3.5-super-vl-free", "nvidia"),
+        ("nvidia/nemotron-3.5-lightning-free", "nvidia"),
+        ("nvidia/nemotron-4-340b-reward", "nvidia"),
+        ("nvidia/llama-3.1-nemotron-70b-instruct", "nvidia"),
+        ("nvidia/llama-3.1-nemotron-8b-instruct", "nvidia"),
+        // OpenAI-compatible
+        ("openai/gpt-4o-mini", "openai"),
+        ("openai/gpt-4o", "openai"),
+        ("openai/gpt-3.5-turbo", "openai"),
+        // OpenRouter
+        ("openrouter/anthropic/claude-3.5-sonnet", "openrouter"),
+        ("openrouter/meta-llama/llama-3.1-405b-instruct", "openrouter"),
+        // Local
+        ("ollama/llama3.1", "ollama"),
+        ("lmstudio/local-model", "lmstudio"),
     ];
 
     let mut out = Vec::new();
