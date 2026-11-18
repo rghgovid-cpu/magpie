@@ -32,6 +32,7 @@ import re
 import csv
 import json
 import time
+import random
 import argparse
 from datetime import datetime
 from urllib.parse import urljoin, urlparse, urlunparse
@@ -49,6 +50,14 @@ DAILY_LIMIT = 200
 
 # Default delay between requests (seconds) — be nice to servers
 DEFAULT_DELAY = 1.0
+
+# Jitter range (seconds) added to each delay to look human
+DELAY_JITTER = 2.0
+
+
+def jitter_delay(base_delay):
+    """Return a human-like delay: base_delay + random jitter (0 to DELAY_JITTER seconds)."""
+    return base_delay + random.uniform(0, DELAY_JITTER)
 
 # State file to track daily crawl count
 MAGPIE_CONFIG_DIR = os.path.expanduser("~/.config/magpie")
@@ -446,13 +455,14 @@ def main():
         "--delay",
         type=float,
         default=DEFAULT_DELAY,
-        help=f"Delay in seconds between requests (default: {DEFAULT_DELAY})",
+        help=f"Base delay in seconds between requests (random jitter added, default: {DEFAULT_DELAY})",
     )
     args = parser.parse_args()
 
     print(
         "⚠️  Magpie is a responsible crawler. We respect robots.txt, rate-limit requests, "
-        "and identify ourselves. Please contact us if we crawl too aggressively.",
+        "add random jitter to look human, and identify ourselves. "
+        "Please contact us if we crawl too aggressively.",
         file=sys.stderr,
     )
 
@@ -498,9 +508,12 @@ def main():
         delay = record.get("robots_delay", args.delay)
         print(f"[{status}] {url} (delay: {delay}s)", file=sys.stderr)
 
-        # Rate limit: sleep before the next request (not after the last one)
+        # Rate limit: sleep with human-like jitter before the next request
+        # (not after the last one)
         if i < len(args.urls) - 1 and crawled_this_run < remaining:
-            time.sleep(delay)
+            sleep_time = jitter_delay(delay)
+            print(f"   sleeping {sleep_time:.1f}s before next request...", file=sys.stderr)
+            time.sleep(sleep_time)
 
     # Update and save daily state
     state["count"] = state["count"] + crawled_this_run
