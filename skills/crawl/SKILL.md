@@ -35,7 +35,7 @@ Use this skill to crawl websites and export structured data that is ready for CR
 We are nice crawlers. Magpie is designed to be respectful to the websites it visits:
 
 - **Respects `robots.txt`**: Checks `Disallow` rules and `Crawl-delay` directives before fetching any page. If a site disallows crawling, Magpie skips it.
-- **Rate-limited with human jitter**: Adds a random delay between requests (base 1 second + random 0–2 seconds jitter, or the `Crawl-delay` from `robots.txt` if specified). Use `--delay N` to override the base delay.
+- **Rate-limited with human jitter**: Base delay of 60 seconds plus random 0–60 seconds jitter between requests (total 60–120 seconds), or the `Crawl-delay` from `robots.txt` if specified. Use `--delay N` to override the base delay.
 - **Transparent identity**: Identifies itself with a clear `User-Agent` string including a contact URL.
 - **Daily quota**: Limited to 200 records per day by default to prevent accidental overload.
 
@@ -101,7 +101,7 @@ https://example.com,Example Corp,Example Corp,"A leading marketing agency",info@
 ## Notes
 
 - Respects `robots.txt` (Disallow rules and Crawl-delay directives)
-- Rate-limited with human jitter: base 1 second + random 0–2 seconds between requests (use `--delay N` to override base)
+- Rate-limited with human jitter: base 60 seconds + random 0–60 seconds between requests (total 60–120s, use `--delay N` to override base)
 - Identifies itself with a transparent User-Agent including contact info
 - Daily quota: 200 records per day (resets at midnight local time)
 - Extracts mailto: and tel: links automatically

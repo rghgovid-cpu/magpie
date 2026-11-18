@@ -49,10 +49,11 @@ except ImportError:
 DAILY_LIMIT = 200
 
 # Default delay between requests (seconds) — be nice to servers
-DEFAULT_DELAY = 1.0
+DEFAULT_DELAY = 60.0
 
 # Jitter range (seconds) added to each delay to look human
-DELAY_JITTER = 2.0
+# With DEFAULT_DELAY=60 and DELAY_JITTER=60, total delay is 60-120 seconds
+DELAY_JITTER = 60.0
 
 
 def jitter_delay(base_delay):
@@ -455,7 +456,7 @@ def main():
         "--delay",
         type=float,
         default=DEFAULT_DELAY,
-        help=f"Base delay in seconds between requests (random jitter added, default: {DEFAULT_DELAY})",
+        help=f"Base delay in seconds between requests (random jitter added, default: {DEFAULT_DELAY}, range with jitter: {DEFAULT_DELAY}-{DEFAULT_DELAY + DELAY_JITTER})",
     )
     args = parser.parse_args()
 

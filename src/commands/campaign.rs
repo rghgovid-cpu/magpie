@@ -90,7 +90,7 @@ pub struct CrawlArgs {
     #[arg(long, default_value = "json")]
     pub format: String,
     /// Delay in seconds between requests (respectful crawling)
-    #[arg(long, default_value = "1.0")]
+    #[arg(long, default_value = "60.0")]
     pub delay: f64,
 }
 
